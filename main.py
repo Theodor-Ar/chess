@@ -5,7 +5,7 @@ start_time = time()
 
 
 class Data:
-    """ класс для хранения статистики и прочих данных """
+    """Класс для хранения статистики и прочих данных """
 
 
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
@@ -50,8 +50,7 @@ class Data:
 
 
 class Board(Data):
-    """ клавв для работы с доской """
-
+    """Класс для работы с шахматной доской"""
 
     #  матрица игрового поля
     matrix = [  
@@ -66,77 +65,99 @@ class Board(Data):
     ]
         
 
-    def figure_on_coords(self, x: int, y:int) -> str:
-        return self.matrix[7-y][x]
+    @classmethod
+    def get_piece(cls, x: int, y:int) -> str:
+        return cls.matrix[7-y][x]
+    
+
+    @classmethod
+    def set_piece(cls, x: int, y: int, piece: str) -> None:
+        cls.matrix[7-y][x] = piece
 
 
-    #  визуальное перемещение фигуры
-    def move(self, pos1: tuple, pos2: tuple):
-        print(f'moving figure from {pos1} to {pos2}')
+    @classmethod
+    def move_piece(cls, start_pos: tuple, end_pos: tuple):
+        cls.set_piece(*end_pos, cls.get_piece(*start_pos))
+        cls.set_piece(*start_pos, '.')
+        # print(f'moving figure from {start_pos} to {end_pos}')
 
 
 class Piece:
-    """ общий класс для всех фигур """
+    """Общий класс для всех фигур"""
 
 
     def __init__(self, color):
         self.color = color
 
 
-    def __call__(self):
-        return self.symbol
-
-
-    def move(self, pos1: tuple, pos2: tuple):
-        self.pos1 = pos1
-        self.pos2 = pos2
-
-        if self.can_move(pos1, pos2):
-            Board.move(pos1, pos2)
+    def move_piece(self, start_pos: tuple, end_pos: tuple):
+        if self.can_move(start_pos, end_pos):
+            Board.move_piece(start_pos, end_pos)
         else:
-            print(f"This figure can't move from {pos1} to {pos2}")
+            print(f"This figure can't move from {start_pos} to {end_pos}")
     
 
-    def friendly_fire(self, x: int, y: int) -> bool:
+    def is_valid_target_cell(self, x: int, y: int) -> bool:
         if self.color == 'white':
-            return Board.figure_on_coords(x, y) in Data.white_pieces
+            piece = Board.get_piece(x, y)
+            return piece not in Data.white_pieces
         elif self.color == 'black':
-            return Board.figure_on_coords(x, y) in Data.black_pieces
+            piece = Board.get_piece(x, y)
+            return piece not in Data.black_pieces
         else:
             raise NameError('Incorrect figure color')
 
 
-    def empty_cell(self, x: int, y: int) -> bool:
-        return Board.figure_on_coords(x, y) == '.'
+    def is_valid_start_cell(self, x: int, y: int) -> bool:
+        if self.color == 'white':
+            return Board.get_piece(x, y) in Data.white_pieces
+        elif self.color == 'black':
+            return Board.get_piece(x, y) in Data.black_pieces
+        else:
+            raise NameError('Incorrect figure color')
 
 
-    def empty_row(self, pos1: tuple, pos2: tuple) -> bool:
-        lst = []        
-        for x in range(1, 9):
-            for y in range(1, 9):
-                P = x, y
-                if dist(pos1, P) + dist(P, pos2) == dist(pos1, pos2):
-                    if pos1 != P != pos2: 
-                        lst.append(P)
+    def is_empty_cell(self, x: int, y: int) -> bool:
+        return Board.get_piece(x, y) == '.'
 
-        return all(self.empty_cell(*i) for i in lst)
+
+    def is_empty_line(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        lst = [] 
+
+        for x in range(8):
+            for y in range(8):
+                if (x - x2) * (y2 - y1) - (y - y1) * (x2 - x1) == 0:  # проверка на то, что точка P лежит на прямой, соединяющей start_pos и end_pos
+                    conditions = [
+                        (x - x1) * (x - x2) <= 0,
+                        (y - y1) * (y - y2) <= 0,
+                        start_pos != (x, y) != end_pos
+                    ]
+                    if all(conditions):  # проверка на то, что точка P лежит между start_pos и end_pos
+                        lst.append((x, y))
+
+        return all(self.is_empty_cell(*i) for i in lst)
 
 
     def validate_move(func):
-        def wrapper(self, pos1, pos2):
-            x1, y1 = pos1
-            x2, y2 = pos2
+        def wrapper(self, start_pos, end_pos):
+            x1, y1 = start_pos
+            x2, y2 = end_pos
 
-            A = not self.empty_cell(x1, y1)
-            B = not self.friendly_fire(x2, y2)
+            basic_conditions = [
+                self.is_valid_target_cell(x2, y2),  # конечная клетка не занята своей фигурой 
+                all(0 <= a <= 7 for a in (x1, y1, x2, y2)),  # координаты обеих клеток внутри доски
+                self.is_valid_start_cell(x1, y1),  # на стартовой клетке стоит фигура именно этого цвета
+                start_pos != end_pos  # ход не в ту же самую клетку
+            ]
 
-            return A and B and func(self, pos1, pos2)
-
+            return all(basic_conditions) and func(self, start_pos, end_pos)
         return wrapper
 
 
 class King(Piece):
-    """ класс короля """
+    """Класс короля """
 
     def __init__(self, color):
         super().__init__(color)
@@ -145,18 +166,15 @@ class King(Piece):
             self.value = None
 
     @Piece.validate_move
-    def can_move(self, pos1: tuple, pos2: tuple) -> bool:
-        x1, y1 = pos1
-        x2, y2 = pos2
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
 
         return max(abs(x1 - x2), abs(y1 - y2)) == 1
 
 
-print(King('white').can_move((4, 0), (5, 1)))
-
-
 class Queen(Piece):
-    """ класс королевы """
+    """Класс королевы """
 
     def __init__(self, color):
         super().__init__(color)
@@ -164,9 +182,10 @@ class Queen(Piece):
             self.symbol = 'Q' if color == 'white' else 'q'
             self.value = 9
 
-    def can_move(self, pos1: tuple, pos2: tuple) -> bool:
-        x1, y1 = pos1
-        x2, y2 = pos2
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
 
         dx = abs(x1 - x2)
         dy = abs(y1 - y2)
@@ -174,12 +193,155 @@ class Queen(Piece):
         A = dx == dy
         B = dy == 0 != dx
         C = dy != 0 == dx
+        D = self.is_empty_line(start_pos, end_pos)
 
-        return (A or B or C) and Board.empty_row(x2, y2) and Board.end_point(x2, y2)
+        return (A or B or C) and D
+
+
+class Rook(Piece):
+    """Класс ладьи """
+
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'R' if color == 'white' else 'r'
+            self.value = 5
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+
+        A = dy == 0 != dx
+        B = dy != 0 == dx
+        C = self.is_empty_line(start_pos, end_pos)
+
+        return (A or B) and C
+
+
+class Knight(Piece):
+    """Класс коня"""
+
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'N' if color == 'white' else 'n'
+            self.value = 3
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+
+        A = dx + dy == 3
+        B = 0 not in {dx, dy}
+
+        return A and B
+
+
+class Bishop(Piece):
+    """Класс слона"""
+
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'B' if color == 'white' else 'b'
+            self.value = 3
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+
+        A = dx == dy
+        B =self.is_empty_line(start_pos, end_pos)
+
+        return A and B
+
+
+class Pawn(Piece):
+    """Класс пешки"""
+
+    en_passant_pos: tuple = None
+
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'P' if color == 'white' else 'p'
+            self.value = 1
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+
+        dx = abs(x1 - x2)
+
+        def short_move():
+            conditions = [
+                dx == 0,
+                y2 - y1 == (1 if self.color == 'white' else -1),
+                Board.get_piece(*end_pos) == '.'
+            ]
+            return all(conditions)
+
+        def long_move():
+            conditions = [
+                dx == 0, 
+                y2 - y1 == (2 if self.color == 'white' else -2), 
+                Board.get_piece(*end_pos) == '.', 
+                y1 == (1 if self.color == 'white' else 6),
+                self.is_empty_line(start_pos, end_pos)
+            ]
+            return all(conditions)
+        
+        def capture():
+            conditions = [
+                dx == 1,
+                y2 - y1 == (1 if self.color == 'white' else -1),
+                Board.get_piece(*end_pos) in (Data.black_pieces if self.color == 'white' else Data.white_pieces)
+            ]
+            return all(conditions)
+        
+        def en_passant_capture():
+            conditions = [
+                y1 == (3 if self.color == 'white' else 4),  #  пешка на 4-ой или 5-ой линии
+                capture(),
+                end_pos == self.en_passant_pos
+            ]
+            return all(conditions)
+
+        return any([
+            short_move(), 
+            long_move(), 
+            capture(), 
+            en_passant_capture()
+        ])
+
+        # if short_move():
+        #     if end_of_board():
+        #         pass
+        #     else:
+        #         Piece.move_piece(start_pos, end_pos)
+
+        # if long_move():
+        #     self.en_passant_pos = x1, y1 + (1 if self.color == 'white' else -1)
+        #     Piece.move_piece(start_pos, end_pos)
+
+        # return dy == 0 and dx == 1
 
 
 class Visual:
-    """ класс для отображения визуальной части """
+    """Класс для отображения визуальной части"""
 
     #  вывод таймера 
     def timer(self) -> str:
@@ -218,7 +380,7 @@ class Visual:
 
 
 class Game:
-    """ класс для сборки всей игры """
+    """Класс для сборки всей игры"""
 
     def start(self):
         print('game is started')
