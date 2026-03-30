@@ -1,7 +1,6 @@
 from math import dist
 from fnmatch import fnmatch
 from time import time
-from tkinter import *
 start_time = time()
 
 
@@ -9,13 +8,8 @@ class Data:
     """ класс для хранения статистики и прочих данных """
 
 
-    def pieces(self, color):
-        if color not in {'white', 'black'}: raise TypeError
-
-        white_pices = {'K', 'Q', 'B', 'R', 'N', 'P'}
-        black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
-
-        return white_pices if color == 'white' else black_pieces
+    white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
+    black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
 
 
     alive_white = {
@@ -55,13 +49,38 @@ class Data:
     }
 
 
+class Board(Data):
+    """ клавв для работы с доской """
+
+
+    #  матрица игрового поля
+    matrix = [  
+        ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+        ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+        ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+    ]
+        
+
+    def figure_on_coords(self, x: int, y:int) -> str:
+        return self.matrix[7-y][x]
+
+
+    #  визуальное перемещение фигуры
+    def move(self, pos1: tuple, pos2: tuple):
+        print(f'moving figure from {pos1} to {pos2}')
+
+
 class Piece:
     """ общий класс для всех фигур """
 
 
     def __init__(self, color):
         self.color = color
-        self.symbol = ''
 
 
     def __call__(self):
@@ -76,28 +95,44 @@ class Piece:
             Board.move(pos1, pos2)
         else:
             print(f"This figure can't move from {pos1} to {pos2}")
+    
 
-
-    def end_point(self, x: int, y: int) -> bool:
-        return self.matrix[7 - y][x] not in Data.pieces(self.color)
+    def friendly_fire(self, x: int, y: int) -> bool:
+        if self.color == 'white':
+            return Board.figure_on_coords(x, y) in Data.white_pieces
+        elif self.color == 'black':
+            return Board.figure_on_coords(x, y) in Data.black_pieces
+        else:
+            raise NameError('Incorrect figure color')
 
 
     def empty_cell(self, x: int, y: int) -> bool:
-        return Board.matrix[7 - y][x] == '.'
+        return Board.figure_on_coords(x, y) == '.'
 
 
     def empty_row(self, pos1: tuple, pos2: tuple) -> bool:
-        lst = []
-        
+        lst = []        
         for x in range(1, 9):
             for y in range(1, 9):
                 P = x, y
-
                 if dist(pos1, P) + dist(P, pos2) == dist(pos1, pos2):
                     if pos1 != P != pos2: 
                         lst.append(P)
 
         return all(self.empty_cell(*i) for i in lst)
+
+
+    def validate_move(func):
+        def wrapper(self, pos1, pos2):
+            x1, y1 = pos1
+            x2, y2 = pos2
+
+            A = not self.empty_cell(x1, y1)
+            B = not self.friendly_fire(x2, y2)
+
+            return A and B and func(self, pos1, pos2)
+
+        return wrapper
 
 
 class King(Piece):
@@ -109,11 +144,15 @@ class King(Piece):
             self.symbol = 'K' if color == 'white' else 'k'
             self.value = None
 
+    @Piece.validate_move
     def can_move(self, pos1: tuple, pos2: tuple) -> bool:
         x1, y1 = pos1
         x2, y2 = pos2
 
         return max(abs(x1 - x2), abs(y1 - y2)) == 1
+
+
+print(King('white').can_move((4, 0), (5, 1)))
 
 
 class Queen(Piece):
@@ -137,34 +176,6 @@ class Queen(Piece):
         C = dy != 0 == dx
 
         return (A or B or C) and Board.empty_row(x2, y2) and Board.end_point(x2, y2)
-
-
-class Board(Data):
-    """ клавв для работы с доской """
-
-
-    K = King('white')()
-    k = King('black')()
-    Q = Queen('white')()
-    q = Queen('black')()
-
-
-    #  матрица игрового поля
-    matrix = [  
-        ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-        ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-        ['.', '.', '.', '.', '.', '.', '.', '.'],
-        ['.', '.', '.', '.', '.', '.', '.', '.'],
-        ['.', '.', '.', '.', '.', '.', '.', '.'],
-        ['.', '.', '.', '.', '.', '.', '.', '.'],
-        ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-        ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-    ]
-        
-
-    #  визуальное перемещение фигуры
-    def move(self, pos1: tuple, pos2: tuple):
-        print(f'moving figure from {pos1} to {pos2}')
 
 
 class Visual:
@@ -216,5 +227,4 @@ class Game:
         print('game over')
 
 
-print(Board.K)
 
