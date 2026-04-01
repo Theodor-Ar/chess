@@ -344,25 +344,38 @@ class Visual:
     """Класс для отображения визуальной части"""
 
     #  вывод таймера 
-    def timer(self) -> str:
+    def _timer(self) -> str:
         print('game timer was displayed')
 
     #  вывод кол-ва сделанных ходов
-    def move_counter(self) -> str:
+    def _move_counter(self) -> str:
         print('number of moves made was displayed')
 
     #  вывод текущего хода
-    def current_move(self) -> str:
+    def _current_move(self) -> str:
         print('current move was dusplayed')
 
     #  вывод доски на экран
     @staticmethod
-    def show_board(ind=5) -> str:
+    def _show_board(ind=5) -> str:
+        s = ' ' * ind
+        information = [
+            '/exit - завершить игру',
+            'бла бла бла',
+            'бла бла бла',
+            'бла бла бла',
+            'бла бла бла',
+            'бла бла бла',
+            'бла бла бла',
+            'бла бла бла' 
+        ]
 
-        print(f'\n{' ' * ind}   A B C D E F G H\n')
+        print(f'\n{s}    A B C D E F G H    {s}|{s*4}Info bar')
+        print(f"{s}  +{'-'*17}+  {s}|{s}close: /close_info | open: /open_info")
         for i in range(8):
-            print(f"{' ' * ind}{8-i}  {' '.join(Board.matrix[i])}  {8-i}")
-        print(f'\n{' ' * ind}   A B C D E F G H\n')
+            print(f"{s}{8-i} | {' '.join(Board.matrix[i])} | {8-i}{s}|{s}{i+1}. {information[i]}")
+        print(f"{s}  +{'-'*17}+  {s}|")
+        print(f'{s}    A B C D E F G H    {s}|\n')
 
 
     # def input_data(self):
@@ -373,20 +386,28 @@ class Visual:
 
     #  вывод всех элементов
     def visual(self):
-        self.timer()
-        self.move_counter()
-        self.current_move()
-        self.show_board()
+        self._timer()
+        self._move_counter()
+        self._current_move()
+        self._show_board()
 
 
-class Game:
-    """Класс для сборки всей игры"""
+def command_handler(command: str):
+    global run
+    if command == '/exit': run = False
 
-    def start(self):
-        print('game is started')
 
-    def end(self):
-        print('game over')
+run = True
+def game():
+    global run
+    while run:
+        Visual().visual()
+        input_data = input('enter text: ').replace(' ', '').replace(' ', '').strip().lower()
+        command_handler(input_data)
+
+
+if __name__ == '__main__':
+    game()
 
 
 
