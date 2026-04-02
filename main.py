@@ -7,10 +7,36 @@ start_time = time()
 class Data:
     """Класс для хранения статистики и прочих данных """
 
+    def square_to_coords(self, command: str) -> tuple:
+        pos1, pos2 = command.split('-')
+        return (
+            self.cords(pos1[0]), self.cords(pos1[1])
+        ), (
+            self.cords(pos2[0]), self.cords(pos2[1])
+        )
+
 
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
 
+    cords = {
+        '1': 0,
+        '2': 1,
+        '3': 2,
+        '4': 3,
+        '5': 4,
+        '6': 5,
+        '7': 6,
+        '8': 7,
+        'a': 0,
+        'b': 1,
+        'c': 2,
+        'd': 3,
+        'e': 4,
+        'f': 5,
+        'g': 6,
+        'h': 7
+        }
 
     alive_white = {
         'P': 8,
@@ -91,7 +117,17 @@ class Piece:
 
 
     def move_piece(self, start_pos: tuple, end_pos: tuple):
-        if self.can_move(start_pos, end_pos):
+        symbol = Board.get_piece(*start_pos)
+        color = 'white' if symbol in Data.white_pieces else 'black'
+        pieces = {
+            'k': King(color),
+            'q': Queen(color),
+            'r': Rook(color),
+            'n': Knight(color),
+            'b': Bishop(color),
+            'p': Pawn(color)
+        }
+        if pieces[symbol.lower()].can_move(start_pos, end_pos):
             Board.move_piece(start_pos, end_pos)
         else:
             print(f"This figure can't move from {start_pos} to {end_pos}")
@@ -142,6 +178,12 @@ class Piece:
 
     def validate_move(func):
         def wrapper(self, start_pos, end_pos):
+            def safe_call(func):
+                try:
+                    return func()
+                except:
+                    return False
+
             x1, y1 = start_pos
             x2, y2 = end_pos
 
@@ -152,7 +194,7 @@ class Piece:
                 start_pos != end_pos  # ход не в ту же самую клетку
             ]
 
-            return all(basic_conditions) and func(self, start_pos, end_pos)
+            return all(safe_call(a) for a in basic_conditions) and func(self, start_pos, end_pos)
         return wrapper
 
 
@@ -308,7 +350,10 @@ class Pawn(Piece):
             conditions = [
                 dx == 1,
                 y2 - y1 == (1 if self.color == 'white' else -1),
-                Board.get_piece(*end_pos) in (Data.black_pieces if self.color == 'white' else Data.white_pieces)
+                (
+                    Board.get_piece(*end_pos) in (Data.black_pieces if self.color == 'white' else Data.white_pieces) or
+                    end_pos == self.en_passant_pos
+                )
             ]
             return all(conditions)
         
@@ -359,29 +404,17 @@ class Visual:
     @staticmethod
     def _show_board(ind=5) -> str:
         s = ' ' * ind
-        information = [
+        inf = [
             '/exit - завершить игру',
-            'бла бла бла',
-            'бла бла бла',
-            'бла бла бла',
-            'бла бла бла',
-            'бла бла бла',
-            'бла бла бла',
-            'бла бла бла' 
+            '<from> - <to> например a2-a3'
         ]
 
-        print(f'\n{s}    A B C D E F G H    {s}|{s*4}Info bar')
-        print(f"{s}  +{'-'*17}+  {s}|{s}close: /close_info | open: /open_info")
+        print(f'\n{s}    A B C D E F G H    {s}|{s*2}Info bar')
+        print(f"{s}  +{'-'*17}+  {s}|")
         for i in range(8):
-            print(f"{s}{8-i} | {' '.join(Board.matrix[i])} | {8-i}{s}|{s}{i+1}. {information[i]}")
+            print(f"{s}{8-i} | {' '.join(Board.matrix[i])} | {8-i}{s}|{s}{str(i+1) + '.' if i < len(inf) else ''} {inf[i] if i < len(inf) else ''}")
         print(f"{s}  +{'-'*17}+  {s}|")
         print(f'{s}    A B C D E F G H    {s}|\n')
-
-
-    # def input_data(self):
-    #     motion = input('enter text: ').replace(' ', '').lower()
-    #     if fnmatch('[a-h][1-8]', motion)
-    #     self.motion = motion
 
 
     #  вывод всех элементов
@@ -394,7 +427,14 @@ class Visual:
 
 def command_handler(command: str):
     global run
-    if command == '/exit': run = False
+    if fnmatch(command, '[a-h][1-8]-[a-h][1-8]'): 
+        start_pos, end_pos = Data().square_to_coords(command)
+        Piece.move_piece(start_pos, end_pos)
+    elif command == '/exit': 
+        run = False
+    else: 
+        print("\nnothing\n")
+    
 
 
 run = True
