@@ -7,12 +7,15 @@ start_time = time()
 class Data:
     """Класс для хранения статистики и прочих данных """
 
-    def square_to_coords(self, command: str) -> tuple:
+    @classmethod
+    def square_to_coords(cls, command: str) -> tuple:
         pos1, pos2 = command.split('-')
+        x1, y1 = pos1[0], pos1[1]
+        x2, y2 = pos2[0], pos2[1]
         return (
-            self.cords(pos1[0]), self.cords(pos1[1])
+            cls.cords[x1], cls.cords[y1]
         ), (
-            self.cords(pos2[0]), self.cords(pos2[1])
+            cls.cords[x2], cls.cords[y2]
         )
 
 
@@ -107,6 +110,12 @@ class Board(Data):
         cls.set_piece(*start_pos, '.')
         # print(f'moving figure from {start_pos} to {end_pos}')
 
+    def get_piece_color(self, x: int, y: int) -> str:
+        symbol = self.get_piece(x, y)
+        if symbol == '.': 
+            return 'empty'
+        return 'white' if symbol in Data.white_pieces else 'black'
+
 
 class Piece:
     """Общий класс для всех фигур"""
@@ -117,8 +126,20 @@ class Piece:
 
 
     def move_piece(self, start_pos: tuple, end_pos: tuple):
+        def capture(x: int, y: int) -> None:
+            fallen_piece = Board.get_piece(x, y)
+            if color == 'white':
+                Data.dead_black[fallen_piece] += 1
+                Data.alive_black[fallen_piece] -= 1
+            else:
+                Data.dead_white[fallen_piece] += 1
+                Data.alive_white[fallen_piece] -= 1
+            Board.set_piece(x, y, '.')
+        
+        x1, y1 = start_pos
+        x2, y2 = end_pos
         symbol = Board.get_piece(*start_pos)
-        color = 'white' if symbol in Data.white_pieces else 'black'
+        color = self.color
         pieces = {
             'k': King(color),
             'q': Queen(color),
@@ -127,10 +148,34 @@ class Piece:
             'b': Bishop(color),
             'p': Pawn(color)
         }
-        if pieces[symbol.lower()].can_move(start_pos, end_pos):
-            Board.move_piece(start_pos, end_pos)
+
+        if symbol == '.': 
+            print("A piece cannot move from an empty square")
+            pass
         else:
-            print(f"This figure can't move from {start_pos} to {end_pos}")
+            piece = pieces[symbol.lower()]
+            color = piece.color
+            can_move, description = piece.can_move(start_pos, end_pos)
+
+            if can_move:
+                if description == 'pawn: en passant capture':
+                    enemy_pos = (x2, y2 - 1) if color == 'white' else (x2, y2 + 1)
+                    capture(*enemy_pos)
+                elif not piece.is_empty_cell(*end_pos):
+                    capture(*end_pos)
+
+                Board.move_piece(start_pos, end_pos)
+
+                if description == 'pawn: long move':
+                    Pawn.en_passant_pos = (x1, y1 + 1) if color == 'white' else (x1, y1 - 1)
+                else:
+                    Pawn.en_passant_pos = None
+
+                if description == 'pawn: end of the board':
+                    ...
+            else:
+                print(f"This figure can't move from {start_pos} to {end_pos}")
+
     
 
     def is_valid_target_cell(self, x: int, y: int) -> bool:
@@ -178,23 +223,23 @@ class Piece:
 
     def validate_move(func):
         def wrapper(self, start_pos, end_pos):
-            def safe_call(func):
-                try:
-                    return func()
-                except:
-                    return False
-
             x1, y1 = start_pos
             x2, y2 = end_pos
-
-            basic_conditions = [
-                self.is_valid_target_cell(x2, y2),  # конечная клетка не занята своей фигурой 
-                all(0 <= a <= 7 for a in (x1, y1, x2, y2)),  # координаты обеих клеток внутри доски
-                self.is_valid_start_cell(x1, y1),  # на стартовой клетке стоит фигура именно этого цвета
-                start_pos != end_pos  # ход не в ту же самую клетку
-            ]
-
-            return all(safe_call(a) for a in basic_conditions) and func(self, start_pos, end_pos)
+            
+            if not all(0 <= a <= 7 for a in (x1, y1, x2, y2)):  # координаты обеих клеток внутри доски
+                return False, None
+            
+            if start_pos == end_pos:  # ход не в ту же самую клетку
+                return False, None
+            
+            if not self.is_valid_start_cell(x1, y1):  # на стартовой клетке стоит фигура именно этого цвета
+                return False, None
+            
+            if not self.is_valid_target_cell(x2, y2):  # конечная клетка не занята своей фигурой 
+                return False, None
+            
+            return func(self, start_pos, end_pos)
+        
         return wrapper
 
 
@@ -208,11 +253,14 @@ class King(Piece):
             self.value = None
 
     @Piece.validate_move
-    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
         x2, y2 = end_pos
 
-        return max(abs(x1 - x2), abs(y1 - y2)) == 1
+        can_move = max(abs(x1 - x2), abs(y1 - y2)) == 1
+        description = None
+        
+        return can_move, description
 
 
 class Queen(Piece):
@@ -225,7 +273,7 @@ class Queen(Piece):
             self.value = 9
 
     @Piece.validate_move
-    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
         x2, y2 = end_pos
 
@@ -237,7 +285,10 @@ class Queen(Piece):
         C = dy != 0 == dx
         D = self.is_empty_line(start_pos, end_pos)
 
-        return (A or B or C) and D
+        can_move = (A or B or C) and D
+        description = None
+        
+        return can_move, description
 
 
 class Rook(Piece):
@@ -250,7 +301,7 @@ class Rook(Piece):
             self.value = 5
 
     @Piece.validate_move
-    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
         x2, y2 = end_pos
 
@@ -261,7 +312,10 @@ class Rook(Piece):
         B = dy != 0 == dx
         C = self.is_empty_line(start_pos, end_pos)
 
-        return (A or B) and C
+        can_move = (A or B) and C
+        description = None
+        
+        return can_move, description
 
 
 class Knight(Piece):
@@ -274,7 +328,7 @@ class Knight(Piece):
             self.value = 3
 
     @Piece.validate_move
-    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
         x2, y2 = end_pos
 
@@ -284,7 +338,10 @@ class Knight(Piece):
         A = dx + dy == 3
         B = 0 not in {dx, dy}
 
-        return A and B
+        can_move = A and B 
+        description = None
+        
+        return can_move, description
 
 
 class Bishop(Piece):
@@ -297,7 +354,7 @@ class Bishop(Piece):
             self.value = 3
 
     @Piece.validate_move
-    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
         x2, y2 = end_pos
 
@@ -305,9 +362,12 @@ class Bishop(Piece):
         dy = abs(y1 - y2)
 
         A = dx == dy
-        B =self.is_empty_line(start_pos, end_pos)
+        B = self.is_empty_line(start_pos, end_pos)
 
-        return A and B
+        can_move = A and B
+        description = None
+        
+        return can_move, description
 
 
 class Pawn(Piece):
@@ -322,67 +382,61 @@ class Pawn(Piece):
             self.value = 1
 
     @Piece.validate_move
-    def can_move(self, start_pos: tuple, end_pos: tuple) -> bool:
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
         x2, y2 = end_pos
-
         dx = abs(x1 - x2)
+        color = self.color
 
         def short_move():
-            conditions = [
+            return all([
                 dx == 0,
-                y2 - y1 == (1 if self.color == 'white' else -1),
+                y2 - y1 == (1 if color == 'white' else -1),
                 Board.get_piece(*end_pos) == '.'
-            ]
-            return all(conditions)
+            ])
 
         def long_move():
-            conditions = [
-                dx == 0, 
-                y2 - y1 == (2 if self.color == 'white' else -2), 
-                Board.get_piece(*end_pos) == '.', 
-                y1 == (1 if self.color == 'white' else 6),
+            return all([
+                dx == 0,
+                y2 - y1 == (2 if color == 'white' else -2),
+                Board.get_piece(*end_pos) == '.',
+                y1 == (1 if color == 'white' else 6),
                 self.is_empty_line(start_pos, end_pos)
-            ]
-            return all(conditions)
-        
+            ])
+
         def capture():
-            conditions = [
+            return all([
                 dx == 1,
-                y2 - y1 == (1 if self.color == 'white' else -1),
-                (
-                    Board.get_piece(*end_pos) in (Data.black_pieces if self.color == 'white' else Data.white_pieces) or
-                    end_pos == self.en_passant_pos
-                )
-            ]
-            return all(conditions)
-        
+                y2 - y1 == (1 if color == 'white' else -1),
+                Board.get_piece(*end_pos) in (Data.black_pieces if color == 'white' else Data.white_pieces)
+            ])
+
         def en_passant_capture():
-            conditions = [
-                y1 == (3 if self.color == 'white' else 4),  #  пешка на 4-ой или 5-ой линии
-                capture(),
-                end_pos == self.en_passant_pos
-            ]
-            return all(conditions)
+            return all([
+                dx == 1,
+                y2 - y1 == (1 if color == 'white' else -1),
+                Board.get_piece(*end_pos) == '.',
+                end_pos == Pawn.en_passant_pos,
+                y1 == (4 if color == 'white' else 3)  # пешка на 4-ой или 5-ой линии
+            ])
 
-        return any([
-            short_move(), 
-            long_move(), 
-            capture(), 
-            en_passant_capture()
-        ])
+        if short_move():
+            if y2 == (7 if color == 'white' else 0):
+                return True, 'pawn: end of the board'
+            return True, 'pawn: short move'
 
-        # if short_move():
-        #     if end_of_board():
-        #         pass
-        #     else:
-        #         Piece.move_piece(start_pos, end_pos)
+        if long_move():
+            return True, 'pawn: long move'
 
-        # if long_move():
-        #     self.en_passant_pos = x1, y1 + (1 if self.color == 'white' else -1)
-        #     Piece.move_piece(start_pos, end_pos)
+        if en_passant_capture():
+            return True, 'pawn: en passant capture'
 
-        # return dy == 0 and dx == 1
+        if capture():
+            if y2 == (7 if color == 'white' else 0):
+                return True, 'pawn: end of the board'
+            return True, 'pawn: capture'
+
+        return False, None
 
 
 class Visual:
@@ -428,8 +482,10 @@ class Visual:
 def command_handler(command: str):
     global run
     if fnmatch(command, '[a-h][1-8]-[a-h][1-8]'): 
-        start_pos, end_pos = Data().square_to_coords(command)
-        Piece.move_piece(start_pos, end_pos)
+        start_pos, end_pos = Data.square_to_coords(command)
+        color = Board().get_piece_color(*start_pos)
+        piece = Piece(color)
+        piece.move_piece(start_pos, end_pos)
     elif command == '/exit': 
         run = False
     else: 
