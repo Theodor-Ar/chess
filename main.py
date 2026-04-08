@@ -6,7 +6,7 @@ start_time = time()
 
 class Data:
     """Класс для хранения статистики и прочих данных """
-
+    
     @classmethod
     def square_to_coords(cls, command: str) -> tuple:
         pos1, pos2 = command.split('-')
@@ -21,6 +21,9 @@ class Data:
 
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
+
+    cnt_moves = 0
+    cur_color = 'white'
 
     cords = {
         '1': 0,
@@ -125,20 +128,18 @@ class Piece:
         self.color = color
 
 
-    def move_piece(self, start_pos: tuple, end_pos: tuple):
-        def capture(x: int, y: int) -> None:
+    def capture(self, x: int, y: int) -> None:
             fallen_piece = Board.get_piece(x, y)
-            if color == 'white':
+            if self.color == 'white':
                 Data.dead_black[fallen_piece] += 1
                 Data.alive_black[fallen_piece] -= 1
             else:
                 Data.dead_white[fallen_piece] += 1
                 Data.alive_white[fallen_piece] -= 1
             Board.set_piece(x, y, '.')
-        
-        x1, y1 = start_pos
-        x2, y2 = end_pos
-        symbol = Board.get_piece(*start_pos)
+
+
+    def move_piece(self, start_pos: tuple, end_pos: tuple):     
         color = self.color
         pieces = {
             'k': King(color),
@@ -149,35 +150,25 @@ class Piece:
             'p': Pawn(color)
         }
 
-        if symbol == '.': 
+        if self.is_empty_cell(*start_pos): 
             print("A piece cannot move from an empty square")
             pass
         else:
+            symbol = Board.get_piece(*start_pos)
             piece = pieces[symbol.lower()]
-            color = piece.color
             can_move, description = piece.can_move(start_pos, end_pos)
-
             if can_move:
-                if description == 'pawn: en passant capture':
-                    enemy_pos = (x2, y2 - 1) if color == 'white' else (x2, y2 + 1)
-                    capture(*enemy_pos)
-                elif not piece.is_empty_cell(*end_pos):
-                    capture(*end_pos)
-
+                piece.move_handler(start_pos, end_pos)
                 Board.move_piece(start_pos, end_pos)
-
-                if description == 'pawn: long move':
-                    Pawn.en_passant_pos = (x1, y1 + 1) if color == 'white' else (x1, y1 - 1)
-                else:
-                    Pawn.en_passant_pos = None
-
-                if description == 'pawn: end of the board':
-                    ...
             else:
                 print(f"This figure can't move from {start_pos} to {end_pos}")
+                print(description)
+            
+    
+    def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
+        pass
 
     
-
     def is_valid_target_cell(self, x: int, y: int) -> bool:
         if self.color == 'white':
             piece = Board.get_piece(x, y)
@@ -190,15 +181,16 @@ class Piece:
 
 
     def is_valid_start_cell(self, x: int, y: int) -> bool:
-        if self.color == 'white':
-            return Board.get_piece(x, y) in Data.white_pieces
-        elif self.color == 'black':
-            return Board.get_piece(x, y) in Data.black_pieces
-        else:
-            raise NameError('Incorrect figure color')
+        return not Piece.is_empty_cell(x, y)
+        # if self.color == 'white':
+        #     return Board.get_piece(x, y) in Data.white_pieces
+        # elif self.color == 'black':
+        #     return Board.get_piece(x, y) in Data.black_pieces
+        # else:
+        #     raise NameError('Incorrect figure color')
 
-
-    def is_empty_cell(self, x: int, y: int) -> bool:
+    @staticmethod
+    def is_empty_cell(x: int, y: int) -> bool:
         return Board.get_piece(x, y) == '.'
 
 
@@ -223,20 +215,20 @@ class Piece:
 
     def validate_move(func):
         def wrapper(self, start_pos, end_pos):
-            x1, y1 = start_pos
-            x2, y2 = end_pos
+            if Board().get_piece_color(*start_pos) != Data.cur_color:
+                return False, 'Сейчас ходит другой цвет'
             
-            if not all(0 <= a <= 7 for a in (x1, y1, x2, y2)):  # координаты обеих клеток внутри доски
-                return False, None
+            if not all(0 <= a <= 7 for a in (*start_pos, *end_pos)):  # координаты обеих клеток внутри доски
+                return False, 'Позиция вне поля'
             
             if start_pos == end_pos:  # ход не в ту же самую клетку
-                return False, None
+                return False, 'Нельзя ходить в ту же клетку'
             
-            if not self.is_valid_start_cell(x1, y1):  # на стартовой клетке стоит фигура именно этого цвета
-                return False, None
+            if Piece.is_empty_cell(*start_pos):  # на стартовой клетке стоит фигура именно этого цвета
+                return False, 'Стартовая клетка пустая'
             
-            if not self.is_valid_target_cell(x2, y2):  # конечная клетка не занята своей фигурой 
-                return False, None
+            if not self.is_valid_target_cell(*end_pos):  # конечная клетка не занята своей фигурой 
+                return False, 'На конечной клетке находится своя фигура'
             
             return func(self, start_pos, end_pos)
         
@@ -408,16 +400,8 @@ class Pawn(Piece):
             return all([
                 dx == 1,
                 y2 - y1 == (1 if color == 'white' else -1),
-                Board.get_piece(*end_pos) in (Data.black_pieces if color == 'white' else Data.white_pieces)
-            ])
-
-        def en_passant_capture():
-            return all([
-                dx == 1,
-                y2 - y1 == (1 if color == 'white' else -1),
-                Board.get_piece(*end_pos) == '.',
-                end_pos == Pawn.en_passant_pos,
-                y1 == (4 if color == 'white' else 3)  # пешка на 4-ой или 5-ой линии
+                Board.get_piece(*end_pos) in (Data.black_pieces if color == 'white' else Data.white_pieces) or 
+                end_pos == Pawn.en_passant_pos  # взятие на проходе
             ])
 
         if short_move():
@@ -425,18 +409,42 @@ class Pawn(Piece):
                 return True, 'pawn: end of the board'
             return True, 'pawn: short move'
 
-        if long_move():
+        elif long_move():
             return True, 'pawn: long move'
 
-        if en_passant_capture():
-            return True, 'pawn: en passant capture'
-
-        if capture():
+        elif capture():
             if y2 == (7 if color == 'white' else 0):
                 return True, 'pawn: end of the board'
             return True, 'pawn: capture'
 
         return False, None
+    
+
+    def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        description = self.can_move(start_pos, end_pos)[1]
+        color = self.color
+
+        if description == 'pawn: short move':
+            Pawn.en_passant_pos = None
+            if description == 'pawn: end of the board':
+                ...
+        elif description == 'pawn: long move':
+            Pawn.en_passant_pos = x1, y1 + (1 if color == 'white' else -1)
+        elif description == 'pawn: capture':
+            if Pawn.en_passant_pos != None:
+                enemy_pos = x2, y2 - (1 if color == 'white' else -1)
+                self.capture(*enemy_pos)
+            else:
+                self.capture(*end_pos)
+            if description == 'pawn: end of the board':
+                ...
+            Pawn.en_passant_pos = None
+
+    def __pawn_chenger(self):
+        print(f"Выберете фигуру для замены:\nR N B Q")
+        input_data = input(f'enter text: ').replace(' ', '').replace(' ', '').strip().lower()
 
 
 class Visual:
@@ -444,15 +452,22 @@ class Visual:
 
     #  вывод таймера 
     def _timer(self) -> str:
-        print('game timer was displayed')
+        s = ' ' * 5
+        c_time = time() - start_time  # текущее время игры с секундах
+        # h, m, s = int(c_time // 3600), int(c_time // 60), c_time % 60  # часы - минуты - секунды игры
+        # print(f"Время игры: {h:>4}:{m}:{s:.1}")
+        print(f'\n{s}game timer was displayed')
 
     #  вывод кол-ва сделанных ходов
     def _move_counter(self) -> str:
-        print('number of moves made was displayed')
+        s = ' ' * 5
+        print(f"{s}Количество ходов: {Data.cnt_moves}")
 
     #  вывод текущего хода
     def _current_move(self) -> str:
-        print('current move was dusplayed')
+        s = ' ' * 5
+        color = 'белые' if Data.cur_color == 'white' else 'чёрные'
+        print(f"{s}Сейчас ходят: {color}")
 
     #  вывод доски на экран
     @staticmethod
@@ -490,16 +505,18 @@ def command_handler(command: str):
         run = False
     else: 
         print("\nnothing\n")
-    
-
+        
 
 run = True
 def game():
+    start_time = time()
     global run
     while run:
         Visual().visual()
-        input_data = input('enter text: ').replace(' ', '').replace(' ', '').strip().lower()
+        input_data = input(f'enter text: ').replace(' ', '').replace(' ', '').strip().lower()
         command_handler(input_data)
+        Data.cnt_moves += 1
+        Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
 
 
 if __name__ == '__main__':
