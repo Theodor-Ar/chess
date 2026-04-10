@@ -1,5 +1,7 @@
 from fnmatch import fnmatch
 from time import time
+from copy import deepcopy
+
 start_time = time()
 
 
@@ -87,7 +89,28 @@ class Data:
 class Board(Data):
     """Класс для работы с шахматной доской"""
 
-    #  матрица игрового поля
+    __saved_data = []
+
+    @classmethod
+    def backup(cls, n: int = 1) -> None:
+        if -len(cls.__saved_data) <= -n < 0:
+            saved_data = cls.__saved_data
+            cls.matrix, Data.cnt_moves, Data.alive, Data.dead = saved_data[-n]
+            cls.__saved_data = saved_data[:(-n) + 1]
+            Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
+        else:
+            print('No backup')
+        
+    @classmethod
+    def set_backup(cls) -> None:
+        packet = (
+            deepcopy(cls.matrix),
+            deepcopy(Data.cnt_moves),
+            deepcopy(Data.alive),
+            deepcopy(Data.dead)
+        )
+        cls.__saved_data.append(packet)
+
     matrix = [  
         ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
         ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
@@ -97,8 +120,7 @@ class Board(Data):
         ['.', '.', '.', '.', '.', '.', '.', '.'],
         ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
         ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-    ]
-        
+    ]        
 
     @classmethod
     def get_piece(cls, x: int, y:int) -> str:
@@ -122,7 +144,7 @@ class Board(Data):
         if symbol == '.': 
             return 'empty'
         return 'white' if symbol in Data.white_pieces else 'black'
-
+    
 
 class Piece:
     """Общий класс для всех фигур"""
@@ -156,7 +178,7 @@ class Piece:
       
 
     @staticmethod
-    def piece(x: int, y: int):
+    def piece(x: int, y: int):  # возвращает красс фигуры на позиции
         color = Board.get_piece_color(x, y)
         symbol = Board.get_piece(x, y)
         pieces = {
@@ -179,6 +201,7 @@ class Piece:
             piece = self.piece(*start_pos)  # фигура на стартовой позиции
             can_move, description = piece.can_move(start_pos, end_pos)
             if can_move:
+                Board.set_backup()
                 piece.move_handler(start_pos, end_pos)
                 Board.move_piece(start_pos, end_pos)
                 Data.cnt_moves += 1
@@ -499,6 +522,7 @@ class Visual:
         inf = [
             '<from> - <to> например a2-a3',
             '/hint <cell> - подсказка хода',
+            '/backup <num> - откат ходов',
             '/exit - завершить игру'
         ]
 
@@ -540,6 +564,13 @@ def command_handler(command: str):
                 print(f"{i + 1}. {square}-{Data.crd_to_sq(*pos)}")
         else:
             print('\nДопустимых ходов нет')
+    elif fnmatch(command, '/backup *'):
+        _, num = command.split()
+        try:
+            num = int(num)
+            Board.backup(num)
+        except:
+            print('Вводите число')
     else: 
         print("\nnothing\n")
         
