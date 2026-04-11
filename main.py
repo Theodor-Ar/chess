@@ -32,6 +32,22 @@ class Data:
                 black_score += cls.pieces_value[sym.lower()] * n
         return white_score if color == 'white' else black_score
     
+    @classmethod
+    def pieces_positions(cls, color: str) -> list:
+        positions = []
+        for x in range(8):
+            for y in range(8):
+                symbol = Board.get_piece(x, y)
+                if symbol in (cls.white_pieces if color == 'white' else cls.black_pieces):
+                    positions.append((x, y))
+        return positions
+    
+    @classmethod
+    def king_pos(cls, color: str) -> tuple:
+        for pos in cls.pieces_positions(color):
+            if Board.get_piece(*pos) == ('K' if color == 'white' else 'k'):
+                return pos
+    
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
 
@@ -109,7 +125,7 @@ class Board(Data):
     def backup(cls, n: int = 1) -> None:
         if -len(cls.__saved_data) <= -n < 0:
             saved_data = cls.__saved_data
-            cls.matrix, Data.cnt_moves, Data.alive, Data.dead = saved_data[-n]
+            cls.matrix, Data.cnt_moves, Data.alive, Data.dead, Pawn.en_passant_pos = saved_data[-n]
             cls.__saved_data = saved_data[:(-n) + 1]
             Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
         else:
@@ -121,7 +137,8 @@ class Board(Data):
             deepcopy(cls.matrix),
             deepcopy(Data.cnt_moves),
             deepcopy(Data.alive),
-            deepcopy(Data.dead)
+            deepcopy(Data.dead),
+            deepcopy(Pawn.en_passant_pos)
         )
         cls.__saved_data.append(packet)
 
@@ -150,7 +167,6 @@ class Board(Data):
     def move_piece(cls, start_pos: tuple, end_pos: tuple):
         cls.set_piece(*end_pos, cls.get_piece(*start_pos))
         cls.set_piece(*start_pos, '.')
-        # print(f'moving figure from {start_pos} to {end_pos}')
 
     @classmethod
     def get_piece_color(cls, x: int, y: int) -> str:
@@ -167,8 +183,8 @@ class Piece:
     def __init__(self, color):
         self.color = color
 
-
-    def capture(self, x: int, y: int) -> None:
+    @staticmethod
+    def capture(x: int, y: int) -> None:
             fallen_piece = Board.get_piece(x, y)
             Data.dead[fallen_piece] += 1
             Data.alive[fallen_piece] -= 1
@@ -177,19 +193,24 @@ class Piece:
 
     @staticmethod
     def hint(x1: int, y1: int) -> list:
-        """Функция подсказки возможных ходов для фигуры на определённой позиции"""
+        """Подсказка допустимых ходов для фигуры"""
         if Piece.is_empty_cell(x1, y1):
             raise TypeError('-- Empty cell --')
+
         piece = Piece.piece(x1, y1)
+        start_pos = (x1, y1)
         lst = []
+
         for x2 in range(8):
             for y2 in range(8):
-                start_pos = x1, y1
-                end_pos = x2, y2
+                end_pos = (x2, y2)
                 can_move = piece.can_move(start_pos, end_pos)[0]
-                if can_move:
+
+                if can_move and not Game.move_causes_check(start_pos, end_pos):
                     lst.append(end_pos)
+
         return lst
+
     
 
     @staticmethod
@@ -197,16 +218,9 @@ class Piece:
         """Функция подсказки позиций, которые находятся по угрозой, для текущего цвета"""
         lst = []
 
-        white_positions = []
-        black_positions = []
-        for x in range(8):
-            for y in range(8):
-                cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
-                symbol = Board.get_piece(x, y)
-                if symbol in Data.white_pieces:
-                    white_positions.append((x, y))
-                elif symbol in Data.black_pieces:
-                    black_positions.append((x, y))
+        white_positions = Data.pieces_positions('white')
+        black_positions = Data.pieces_positions('black')
+        cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
                 
         enemy_positions = white_positions if cur_color == 'black' else black_positions
         ally_positions = white_positions if cur_color == 'white' else black_positions
@@ -238,23 +252,30 @@ class Piece:
         return pieces[symbol.lower()]
 
 
-    def move_piece(self, start_pos: tuple, end_pos: tuple):          
-        if self.is_empty_cell(*start_pos): 
+    def move_piece(self, start_pos: tuple, end_pos: tuple):
+        if self.is_empty_cell(*start_pos):
             print("A piece cannot move from an empty square")
         elif Board.get_piece_color(*start_pos) != Data.cur_color:
             print('Сейчас ходит другой цвет')
         else:
-            piece = self.piece(*start_pos)  # фигура на стартовой позиции
+            piece = self.piece(*start_pos)
             can_move, description = piece.can_move(start_pos, end_pos)
-            if can_move:
-                Board.set_backup()
-                piece.move_handler(start_pos, end_pos)
-                Board.move_piece(start_pos, end_pos)
-                Data.cnt_moves += 1
-                Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
-            else:
+
+            if not can_move:
                 print(f"This figure can't move from {start_pos} to {end_pos}")
                 print(description)
+                return
+
+            if Game.move_causes_check(start_pos, end_pos):
+                print('Недопустимый ход: после него король останется под шахом')
+                return
+
+            Board.set_backup()
+            piece.move_handler(start_pos, end_pos)
+            Board.move_piece(start_pos, end_pos)
+            Data.cnt_moves += 1
+            Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
+
             
     
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
@@ -286,7 +307,7 @@ class Piece:
 
         for x in range(8):
             for y in range(8):
-                if (x - x2) * (y2 - y1) - (y - y1) * (x2 - x1) == 0:  # проверка на то, что точка (x, y) лежит на прямой, соединяющей start_pos и end_pos
+                if (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1) == 0:  # проверка на то, что точка (x, y) лежит на прямой, соединяющей start_pos и end_pos
                     conditions = [
                         (x - x1) * (x - x2) <= 0,
                         (y - y1) * (y - y2) <= 0,
@@ -528,6 +549,12 @@ class Visual:
     """Класс для отображения визуальной части"""
 
     @staticmethod
+    def status() -> None:
+        enemy_color = Data.cur_color
+        if Game.is_check(enemy_color):
+            print(f'-- Шах {'белым' if enemy_color == 'white' else 'чёрным'} --')
+
+    @staticmethod
     def _line() -> None:
         """Вывод разграничительной линии"""
         print(f"{'- ' * 37}")
@@ -606,14 +633,32 @@ class Game:
         self.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
         self.cnt_moves = Data.cnt_moves
 
-    def start(self):
+    def start(self) -> None:
         while self.run:
             Visual.show_play_area()
-            input_data = input(f'enter text: ').strip().lower()
+            Visual.status()
+            input_data = input('enter text: ').strip().lower()
             self.command_handler(input_data)
 
-    def stop(self):
+            if self.is_checkmate(Data.cur_color) or self.is_stalemate(Data.cur_color):
+                self.game_over()
+
+
+
+    def stop(self) -> None:
         self.run = False
+
+    def game_over(self) -> None:
+        if self.is_checkmate('white'):
+            print('-- Белым поставлен мат --')
+        elif self.is_checkmate('black'):
+            print('-- Чёрным поставлен мат --')
+        elif self.is_stalemate('white') or self.is_stalemate('black'):
+            print('-- Пат --')
+
+        print('-- Игра окончена --')
+        self.stop()
+
 
     def command_handler(self, command: str) -> None:
         """Функция-обработчик команд"""
@@ -671,8 +716,96 @@ class Game:
             under_threat()
         else: 
             print("\n-- Nothing --\n")
+    
+    @staticmethod
+    def is_check(color: str) -> bool:
+        """Функция проверки на шах"""
+        king_pos = Data.king_pos(color)
+        enemy_color = 'black' if color == 'white' else 'white'
+        enemy_positions = Data.pieces_positions(enemy_color)
+
+        for pos in enemy_positions:
+            piece = Piece.piece(*pos)
+            if piece.can_move(pos, king_pos)[0]:
+                return True
+
+        return False
+    
+    @staticmethod
+    def is_checkmate(color: str) -> bool:
+        """Функция проверки на мат"""
+        if not Game.is_check(color):
+            return False
+
+        for start_pos in Data.pieces_positions(color):
+            piece = Piece.piece(*start_pos)
+
+            for x in range(8):
+                for y in range(8):
+                    end_pos = (x, y)
+                    if piece.can_move(start_pos, end_pos)[0]:
+                        if not Game.move_causes_check(start_pos, end_pos):
+                            return False
+
+        return True
+
+    
+    @staticmethod
+    def move_causes_check(start_pos: tuple, end_pos: tuple) -> bool:
+        """Проверяет, останется ли свой король под шахом после хода"""
+        mover_color = Board.get_piece_color(*start_pos)
+        moving_piece = Board.get_piece(*start_pos)
+        target_piece = Board.get_piece(*end_pos)
+
+        captured_en_passant_pos = None
+        captured_en_passant_piece = None
+
+        # en passant: пешка идёт по диагонали на пустую клетку
+        if moving_piece.lower() == 'p':
+            x1, y1 = start_pos
+            x2, y2 = end_pos
+            if x1 != x2 and target_piece == '.' and end_pos == Pawn.en_passant_pos:
+                captured_en_passant_pos = (x2, y2 - 1) if mover_color == 'white' else (x2, y2 + 1)
+                captured_en_passant_piece = Board.get_piece(*captured_en_passant_pos)
+                Board.set_piece(*captured_en_passant_pos, '.')
+
+        Board.set_piece(*end_pos, moving_piece)
+        Board.set_piece(*start_pos, '.')
+
+        in_check = Game.is_check(mover_color)
+
+        Board.set_piece(*start_pos, moving_piece)
+        Board.set_piece(*end_pos, target_piece)
+
+        if captured_en_passant_pos is not None:
+            Board.set_piece(*captured_en_passant_pos, captured_en_passant_piece)
+
+        return in_check
+    
+    @staticmethod
+    def is_stalemate(color: str) -> bool:
+        """Проверка на пат"""
+        if Game.is_check(color):
+            return False
+
+        for start_pos in Data.pieces_positions(color):
+            piece = Piece.piece(*start_pos)
+
+            for x in range(8):
+                for y in range(8):
+                    end_pos = (x, y)
+                    if piece.can_move(start_pos, end_pos)[0]:
+                        if not Game.move_causes_check(start_pos, end_pos):
+                            return False
+
+        return True
 
 
+
+
+        
+        
+        
 if __name__ == '__main__':
     game = Game()
     game.start()
