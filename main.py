@@ -551,7 +551,7 @@ class Visual:
     def game_score() -> None:
         """Вывод очков"""
         white_score = Data.score('white')
-        black_score = Data.score('white')
+        black_score = Data.score('black')
         print(f"\tСчёт белых: {white_score}")
         print(f"\tСчёт чёрных: {black_score}")
 
@@ -570,7 +570,7 @@ class Visual:
         inf = [
             '<from> - <to> например a2-a3',
             '/hint <cell> - подсказка хода',
-            '/backup <num> - откат ходов',
+            '/undo <num> - откат ходов',
             '/under_threat - позиции под угрозой',
             '/info - игровая информация',
             '/exit - завершить игру'
@@ -591,73 +591,91 @@ class Visual:
         Visual._line()
 
 
-def command_handler(command: str):
-    global run
-    if fnmatch(command, '[a-h][1-8]-[a-h][1-8]'): 
-        sq1, sq2 = command.split('-')
-        start_pos, end_pos = Data.sq_to_crd(sq1), Data.sq_to_crd(sq2)
-        color = Board.get_piece_color(*start_pos)
-        piece = Piece(color)
-        piece.move_piece(start_pos, end_pos)
-
-    elif command == '/exit': 
-        run = False
-
-    elif fnmatch(command, '/hint [a-h][1-8]'):
-        _, square = command.split()
-        x, y = Data.sq_to_crd(square)
-        hint = Piece.hint(x, y)
-        if hint:
-            print('\nВозможные ходы')
-            for i, pos in enumerate(hint):
-                print(f"{i + 1}. {square}-{Data.crd_to_sq(*pos)}")
-        else:
-            print('\nДопустимых ходов нет')
-
-    elif fnmatch(command, '/backup *'):
-        _, num = command.split()
-        if num:
-            try:
-                num = int(num)
-                Board.backup(num)
-            except:
-                print('После команды /backup нужно вводить число')
-        else:
-            Board.backup()
-
-    elif command == '/info':
-        print('\n')
+    @staticmethod
+    def info() -> None:
+        print('')
         Visual.timer()
         Visual.move_counter()
         Visual.current_move()
         Visual.game_score()
 
-    elif command == '/under_threat':
-        threat_positions = Piece.under_threat()
-        if threat_positions:
-            print('Фигуры, находящиеся под угрозой')
-            for i, pos in enumerate(threat_positions):
-                symbol = Piece.piece(*pos).symbol
-                square = Data.crd_to_sq(*pos)
-                print(f"{i + 1}. {symbol} на {square}")
-        else:
-            print('Фигур под угрозой нет')
 
-    else: 
-        print("\n-- Nothing --\n")
+class Game:
+    def __init__(self):
+        self.run = True
+        self.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
+        self.cnt_moves = Data.cnt_moves
+
+    def start(self):
+        while self.run:
+            Visual.show_play_area()
+            input_data = input(f'enter text: ').strip().lower()
+            self.command_handler(input_data)
+
+    def stop(self):
+        self.run = False
+
+    def command_handler(self, command: str) -> None:
+        """Функция-обработчик команд"""
+        def chess_move():
+            sq1, sq2 = command.split('-')
+            start_pos, end_pos = Data.sq_to_crd(sq1), Data.sq_to_crd(sq2)
+            color = Board.get_piece_color(*start_pos)
+            piece = Piece(color)
+            piece.move_piece(start_pos, end_pos)
+
+        def hint():
+            _, square = command.split()
+            x, y = Data.sq_to_crd(square)
+            hint = Piece.hint(x, y)
+            if hint:
+                print('\nВозможные ходы')
+                for i, pos in enumerate(hint):
+                    print(f"{i + 1}. {square}-{Data.crd_to_sq(*pos)}")
+            else:
+                print('\nДопустимых ходов нет')
+
+        def undo():
+            _, num = command.split()
+            if num:
+                try:
+                    num = int(num)
+                    Board.backup(num)
+                except:
+                    print('После команды /backup нужно вводить число')
+            else:
+                Board.backup()
+
+        def under_threat():
+            threat_positions = Piece.under_threat()
+            if threat_positions:
+                print('Фигуры, находящиеся под угрозой')
+                for i, pos in enumerate(threat_positions):
+                    symbol = Piece.piece(*pos).symbol
+                    square = Data.crd_to_sq(*pos)
+                    print(f"{i + 1}. {symbol} на {square}")
+            else:
+                print('Фигур под угрозой нет')
         
-
-run = True
-def game():
-    global run
-    while run:
-        Visual.show_play_area()
-        input_data = input(f'enter text: ').strip().lower()
-        command_handler(input_data)
+        if fnmatch(command, '[a-h][1-8]-[a-h][1-8]'): 
+            chess_move()
+        elif command == '/exit': 
+            self.stop()
+        elif fnmatch(command, '/hint [a-h][1-8]'):
+            hint()
+        elif fnmatch(command, '/undo *'):
+            undo()
+        elif command == '/info':
+            Visual.info()
+        elif command == '/under_threat':
+            under_threat()
+        else: 
+            print("\n-- Nothing --\n")
 
 
 if __name__ == '__main__':
-    game()
+    game = Game()
+    game.start()
 
 
 
