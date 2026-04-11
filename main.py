@@ -6,33 +6,47 @@ start_time = time()
 
 
 class Data:
-    """Класс для хранения статистики и прочих данных """
+    """Класс для хранения статистики и прочих данных"""
     
     @classmethod
-    def square_to_coords(cls, command: str) -> tuple:
-        pos1, pos2 = command.split('-')
-        return cls.sq_to_crd(pos1), cls.sq_to_crd(pos2)
-    
-    @classmethod
-    def sq_to_crd(cls, square: str) -> tuple:
+    def sq_to_crd(cls, square: str) -> tuple:  # функция перевода шазматной позиции в координату
         sym, num = tuple(square)
         return (
             cls.symbols[sym], cls.numbers[num]
         )
     
     @classmethod
-    def crd_to_sq(cls, x: int, y: int) -> str:
+    def crd_to_sq(cls, x: int, y: int) -> str:  # функция перевода координаты в шахматную позицию
         x_to_sym = {v: k for k, v in cls.symbols.items()}
         y_to_num = {v: k for k, v in cls.numbers.items()}
         return x_to_sym[x] + y_to_num[y]
-
-
+    
+    @classmethod
+    def score(cls, color: str) -> int:
+        white_score = 0  # очки белых
+        black_score = 0  # очки черных
+        for sym, n in cls.dead.items():
+            if sym in cls.black_pieces:
+                white_score += cls.pieces_value[sym.lower()] * n
+            else:
+                black_score += cls.pieces_value[sym.lower()] * n
+        return white_score if color == 'white' else black_score
+    
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
 
     cnt_moves = 0
     cur_color = 'white'
     
+    pieces_value = {
+        'k': 0,
+        'q': 9,
+        'r': 5,
+        'n': 3,
+        'b': 3,
+        'p': 1
+    }
+
     symbols = {
         'a': 0,
         'b': 1,
@@ -212,7 +226,8 @@ class Piece:
             
     
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
-        pass
+        if Piece.is_empty_cell(*end_pos):
+            Piece.capture(*end_pos)
 
     
     def is_valid_target_cell(self, x: int, y: int) -> bool:
@@ -277,7 +292,7 @@ class King(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'K' if color == 'white' else 'k'
-            self.value = None
+            self.value = 0
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -492,63 +507,67 @@ class Visual:
 
 
     @staticmethod
-    def _timer() -> None:
+    def timer() -> None:
         """Вывод игрового таймера"""
-        sepr = ' ' * 5
         c_time = time() - start_time  # текущее время игры с секундах
         h, m, s = int(c_time // 3600), int(c_time // 60), c_time % 60  # часы - минуты - секунды игры
-        print(f"{sepr}Время игры: {h} ч. {m} мин. {s:.2f} сек.")
+        print(f"\tВремя игры: {h} ч. {m} мин. {s:.2f} сек.")
 
 
     @staticmethod
-    def _move_counter() -> None:
+    def move_counter() -> None:
         """Вывод кол-ва ходов"""
-        s = ' ' * 5
-        print(f"{s}Количество ходов: {Data.cnt_moves}")
+        print(f"\tКоличество ходов: {Data.cnt_moves}")
 
 
     @staticmethod
-    def _current_move() -> None:
+    def game_score() -> None:
+        """Вывод очков"""
+        white_score = Data.score('white')
+        black_score = Data.score('white')
+        print(f"\tСчёт белых: {white_score}")
+        print(f"\tСчёт чёрных: {black_score}")
+
+
+    @staticmethod
+    def current_move() -> None:
         """Вывод текущего цвета"""
-        s = ' ' * 5
         color = 'белые' if Data.cur_color == 'white' else 'чёрные'
-        print(f"{s}Сейчас ходят: {color}")
+        print(f"\tСейчас ходят: {color}")
 
 
     @staticmethod
-    def _show_board() -> None:
-        """Вывод доски"""
+    def show_play_area() -> None:
+        """Вывод игрового пространства"""
         s = ' ' * 5
         inf = [
             '<from> - <to> например a2-a3',
             '/hint <cell> - подсказка хода',
             '/backup <num> - откат ходов',
+            '/info - игровая информация',
             '/exit - завершить игру'
         ]
 
-        print(f'\n{s}    A B C D E F G H    {s}|{s*2}Info bar')
-        print(f"{s}  +{'-'*17}+  {s}|")
+        Visual._line()
+        print(f'\n\t    A B C D E F G H    {s}|\t  Tips')
+        print(f"\t  +{'-'*17}+  {s}|")
+        s = ' ' * 5
         for i in range(8):
-            print(f"{s}{8-i} | {' '.join(Board.matrix[i])} | {8-i}{s}|{s}{str(i+1) + '.' if i < len(inf) else ''} {inf[i] if i < len(inf) else ''}")
-        print(f"{s}  +{'-'*17}+  {s}|")
-        print(f'{s}    A B C D E F G H    {s}|\n')
-
-
-    @classmethod
-    def visual(cls):
-        """Вывод визуала"""
-        cls._line()
-        cls._timer()
-        cls._move_counter()
-        cls._current_move()
-        cls._show_board()
-        cls._line()
+            matrix_line = Board.matrix[i]
+            line = ' '.join(matrix_line)
+            n = 8 - i
+            tips = f"{str(i + 1) + '.' if i < len(inf) else ''} {inf[i] if i < len(inf) else ''}"
+            print(f"\t{n} | {line} | {n}{s}|\t  {tips}")
+        print(f"\t  +{'-'*17}+  {s}|")
+        print(f'\t    A B C D E F G H    {s}|\n')
+        Visual._line()
 
 
 def command_handler(command: str):
     global run
     if fnmatch(command, '[a-h][1-8]-[a-h][1-8]'): 
-        start_pos, end_pos = Data.square_to_coords(command)
+        sq1, sq2 = command.split('-')
+        start_pos, end_pos = Data.sq_to_crd(sq1), Data.sq_to_crd(sq2)
         color = Board.get_piece_color(*start_pos)
         piece = Piece(color)
         piece.move_piece(start_pos, end_pos)
@@ -571,6 +590,11 @@ def command_handler(command: str):
             Board.backup(num)
         except:
             print('Вводите число')
+    elif command == '/info':
+        Visual.timer()
+        Visual.move_counter()
+        Visual.current_move()
+        Visual.game_score()
     else: 
         print("\nnothing\n")
         
@@ -579,7 +603,7 @@ run = True
 def game():
     global run
     while run:
-        Visual().visual()
+        Visual.show_play_area()
         input_data = input(f'enter text: ').strip().lower()
         command_handler(input_data)
 
