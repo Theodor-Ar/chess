@@ -161,7 +161,7 @@ class Board(Data):
     
 
 class Piece:
-    """Общий класс для всех фигур"""
+    """Родительский класс для всех фигур"""
 
 
     def __init__(self, color):
@@ -177,6 +177,7 @@ class Piece:
 
     @staticmethod
     def hint(x1: int, y1: int) -> list:
+        """Функция подсказки возможных ходов для фигуры на определённой позиции"""
         if Piece.is_empty_cell(x1, y1):
             raise TypeError('-- Empty cell --')
         piece = Piece.piece(x1, y1)
@@ -189,10 +190,41 @@ class Piece:
                 if can_move:
                     lst.append(end_pos)
         return lst
-      
+    
 
     @staticmethod
-    def piece(x: int, y: int):  # возвращает красс фигуры на позиции
+    def under_threat() -> list:
+        """Функция подсказки позиций, которые находятся по угрозой, для текущего цвета"""
+        lst = []
+
+        white_positions = []
+        black_positions = []
+        for x in range(8):
+            for y in range(8):
+                cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
+                symbol = Board.get_piece(x, y)
+                if symbol in Data.white_pieces:
+                    white_positions.append((x, y))
+                elif symbol in Data.black_pieces:
+                    black_positions.append((x, y))
+                
+        enemy_positions = white_positions if cur_color == 'black' else black_positions
+        ally_positions = white_positions if cur_color == 'white' else black_positions
+
+        for enemy_pos in enemy_positions:
+            for ally_pos in ally_positions:
+                piece = Piece.piece(*enemy_pos)
+                A = piece.can_move(enemy_pos, ally_pos)[0]
+                B = ally_pos not in lst
+                if A and B:
+                    lst.append(ally_pos)
+
+        return lst
+
+      
+    @staticmethod
+    def piece(x: int, y: int):
+        """Функция для возврата класса фигуры, находящейся на определённой позиции"""
         color = Board.get_piece_color(x, y)
         symbol = Board.get_piece(x, y)
         pieces = {
@@ -226,7 +258,7 @@ class Piece:
             
     
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
-        if Piece.is_empty_cell(*end_pos):
+        if not Piece.is_empty_cell(*end_pos):
             Piece.capture(*end_pos)
 
     
@@ -247,13 +279,14 @@ class Piece:
 
 
     def is_empty_line(self, start_pos: tuple, end_pos: tuple) -> bool:
+        """Функция проверки, что между двумя позициями все клетки пустые"""
         x1, y1 = start_pos
         x2, y2 = end_pos
         lst = [] 
 
         for x in range(8):
             for y in range(8):
-                if (x - x2) * (y2 - y1) - (y - y1) * (x2 - x1) == 0:  # проверка на то, что точка P лежит на прямой, соединяющей start_pos и end_pos
+                if (x - x2) * (y2 - y1) - (y - y1) * (x2 - x1) == 0:  # проверка на то, что точка (x, y) лежит на прямой, соединяющей start_pos и end_pos
                     conditions = [
                         (x - x1) * (x - x2) <= 0,
                         (y - y1) * (y - y2) <= 0,
@@ -292,7 +325,6 @@ class King(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'K' if color == 'white' else 'k'
-            self.value = 0
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -312,7 +344,6 @@ class Queen(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'Q' if color == 'white' else 'q'
-            self.value = 9
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -340,7 +371,6 @@ class Rook(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'R' if color == 'white' else 'r'
-            self.value = 5
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -367,7 +397,6 @@ class Knight(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'N' if color == 'white' else 'n'
-            self.value = 3
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -393,7 +422,6 @@ class Bishop(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'B' if color == 'white' else 'b'
-            self.value = 3
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -421,7 +449,6 @@ class Pawn(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'P' if color == 'white' else 'p'
-            self.value = 1
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -544,6 +571,7 @@ class Visual:
             '<from> - <to> например a2-a3',
             '/hint <cell> - подсказка хода',
             '/backup <num> - откат ходов',
+            '/under_threat - позиции под угрозой',
             '/info - игровая информация',
             '/exit - завершить игру'
         ]
@@ -571,8 +599,10 @@ def command_handler(command: str):
         color = Board.get_piece_color(*start_pos)
         piece = Piece(color)
         piece.move_piece(start_pos, end_pos)
+
     elif command == '/exit': 
         run = False
+
     elif fnmatch(command, '/hint [a-h][1-8]'):
         _, square = command.split()
         x, y = Data.sq_to_crd(square)
@@ -583,20 +613,38 @@ def command_handler(command: str):
                 print(f"{i + 1}. {square}-{Data.crd_to_sq(*pos)}")
         else:
             print('\nДопустимых ходов нет')
+
     elif fnmatch(command, '/backup *'):
         _, num = command.split()
-        try:
-            num = int(num)
-            Board.backup(num)
-        except:
-            print('Вводите число')
+        if num:
+            try:
+                num = int(num)
+                Board.backup(num)
+            except:
+                print('После команды /backup нужно вводить число')
+        else:
+            Board.backup()
+
     elif command == '/info':
+        print('\n')
         Visual.timer()
         Visual.move_counter()
         Visual.current_move()
         Visual.game_score()
+
+    elif command == '/under_threat':
+        threat_positions = Piece.under_threat()
+        if threat_positions:
+            print('Фигуры, находящиеся под угрозой')
+            for i, pos in enumerate(threat_positions):
+                symbol = Piece.piece(*pos).symbol
+                square = Data.crd_to_sq(*pos)
+                print(f"{i + 1}. {symbol} на {square}")
+        else:
+            print('Фигур под угрозой нет')
+
     else: 
-        print("\nnothing\n")
+        print("\n-- Nothing --\n")
         
 
 run = True
