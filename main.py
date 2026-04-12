@@ -1,6 +1,7 @@
 from fnmatch import fnmatch
 from time import time
 from copy import deepcopy
+from art import text2art
 
 start_time = time()
 
@@ -34,6 +35,7 @@ class Data:
     
     @classmethod
     def pieces_positions(cls, color: str) -> list:
+        """Позиции фигур по цвету"""
         positions = []
         for x in range(8):
             for y in range(8):
@@ -44,9 +46,20 @@ class Data:
     
     @classmethod
     def king_pos(cls, color: str) -> tuple:
+        """Позиция короля по цвету"""
         for pos in cls.pieces_positions(color):
             if Board.get_piece(*pos) == ('K' if color == 'white' else 'k'):
                 return pos
+            
+    @classmethod
+    def figures_to_chenge(cls, color: str) -> set:
+        """Доступные фигуры для замены пешки в конце поля"""
+        if color == 'white':
+            return cls.white_pieces - {'K', 'P'}
+        elif color == 'black':
+            return cls.black_pieces - {'k', 'p'}
+        else:
+            assert color not in {'white', 'black'}, f'{color=} not in {"white", "black"}'
     
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
@@ -183,6 +196,7 @@ class Piece:
     def __init__(self, color):
         self.color = color
 
+
     @staticmethod
     def capture(x: int, y: int) -> None:
             fallen_piece = Board.get_piece(x, y)
@@ -212,7 +226,6 @@ class Piece:
         return lst
 
     
-
     @staticmethod
     def under_threat() -> list:
         """Функция подсказки позиций, которые находятся по угрозой, для текущего цвета"""
@@ -236,34 +249,43 @@ class Piece:
         return lst
 
       
-    @staticmethod
-    def piece(x: int, y: int):
+    @classmethod
+    def piece(cls, x: int, y: int):
         """Функция для возврата класса фигуры, находящейся на определённой позиции"""
-        color = Board.get_piece_color(x, y)
-        symbol = Board.get_piece(x, y)
-        pieces = {
-            'k': King(color),
-            'q': Queen(color),
-            'r': Rook(color),
-            'n': Knight(color),
-            'b': Bishop(color),
-            'p': Pawn(color)
-        }
-        return pieces[symbol.lower()]
+
+        if not cls.is_empty_cell(x, y):
+            color = Board.get_piece_color(x, y)
+            symbol = Board.get_piece(x, y)
+            pieces = {
+                'k': King(color),
+                'q': Queen(color),
+                'r': Rook(color),
+                'n': Knight(color),
+                'b': Bishop(color),
+                'p': Pawn(color)
+            }
+            return pieces[symbol.lower()]
+        else:
+            assert False, 'Empty cell'
 
 
-    def move_piece(self, start_pos: tuple, end_pos: tuple):
+    def move_piece(self, start_pos: tuple, end_pos: tuple) -> None:
+        """Функция для перемещения фигуры"""
+
         if self.is_empty_cell(*start_pos):
-            print("A piece cannot move from an empty square")
+            print('Фигура не может ходить с пустой клетки')
         elif Board.get_piece_color(*start_pos) != Data.cur_color:
             print('Сейчас ходит другой цвет')
         else:
             piece = self.piece(*start_pos)
-            can_move, description = piece.can_move(start_pos, end_pos)
+            can_move, desc = piece.can_move(start_pos, end_pos)
 
             if not can_move:
-                print(f"This figure can't move from {start_pos} to {end_pos}")
-                print(description)
+                sq1 = Data.crd_to_sq(*start_pos)
+                sq2 = Data.crd_to_sq(*end_pos)
+                print(f"Данная фигура не может ходить с {sq1} на {sq2}")
+                if desc: 
+                    print(desc)
                 return
 
             if Game.move_causes_check(start_pos, end_pos):
@@ -273,6 +295,8 @@ class Piece:
             Board.set_backup()
             piece.move_handler(start_pos, end_pos)
             Board.move_piece(start_pos, end_pos)
+            if isinstance(piece, Pawn) and desc and 'end of the board' in desc:
+                piece.pawn_chenger(*end_pos)
             Data.cnt_moves += 1
             Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
 
@@ -281,6 +305,7 @@ class Piece:
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
         if not Piece.is_empty_cell(*end_pos):
             Piece.capture(*end_pos)
+        Pawn.en_passant_pos = None
 
     
     def is_valid_target_cell(self, x: int, y: int) -> bool:
@@ -353,9 +378,9 @@ class King(Piece):
         x2, y2 = end_pos
 
         can_move = max(abs(x1 - x2), abs(y1 - y2)) == 1
-        description = None
+        desc = None
         
-        return can_move, description
+        return can_move, desc
 
 
 class Queen(Piece):
@@ -380,9 +405,9 @@ class Queen(Piece):
         D = self.is_empty_line(start_pos, end_pos)
 
         can_move = (A or B or C) and D
-        description = None
+        desc = None
         
-        return can_move, description
+        return can_move, desc
 
 
 class Rook(Piece):
@@ -406,9 +431,9 @@ class Rook(Piece):
         C = self.is_empty_line(start_pos, end_pos)
 
         can_move = (A or B) and C
-        description = None
+        desc = None
         
-        return can_move, description
+        return can_move, desc
 
 
 class Knight(Piece):
@@ -431,9 +456,9 @@ class Knight(Piece):
         B = 0 not in {dx, dy}
 
         can_move = A and B 
-        description = None
+        desc = None
         
-        return can_move, description
+        return can_move, desc
 
 
 class Bishop(Piece):
@@ -456,9 +481,9 @@ class Bishop(Piece):
         B = self.is_empty_line(start_pos, end_pos)
 
         can_move = A and B
-        description = None
+        desc = None
         
-        return can_move, description
+        return can_move, desc
 
 
 class Pawn(Piece):
@@ -512,37 +537,53 @@ class Pawn(Piece):
 
         elif capture():
             if y2 == (7 if color == 'white' else 0):
-                return True, 'pawn: end of the board'
+                return True, 'pawn: capture + end of the board'
             return True, 'pawn: capture'
 
         return False, None
     
 
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
+        """Функция-обработчик хода пешки"""
+
         x1, y1 = start_pos
         x2, y2 = end_pos
-        description = self.can_move(start_pos, end_pos)[1]
+        desc = self.can_move(start_pos, end_pos)[1]
         color = self.color
 
-        if description == 'pawn: short move':
+        if desc == 'pawn: capture + end of the board':
+            self.capture(*end_pos)
             Pawn.en_passant_pos = None
-            if description == 'pawn: end of the board':
-                ...
-        elif description == 'pawn: long move':
+        elif desc == 'pawn: end of the board':
+            Pawn.en_passant_pos = None
+        elif desc == 'pawn: short move':
+            Pawn.en_passant_pos = None
+        elif desc == 'pawn: long move':
             Pawn.en_passant_pos = x1, y1 + (1 if color == 'white' else -1)
-        elif description == 'pawn: capture':
+        elif desc == 'pawn: capture':
             if Pawn.en_passant_pos == end_pos:
                 enemy_pos = x2, y2 - (1 if color == 'white' else -1)
                 self.capture(*enemy_pos)
             else:
                 self.capture(*end_pos)
-            if description == 'pawn: end of the board':
-                ...
             Pawn.en_passant_pos = None
 
-    def __pawn_chenger(self):
-        print(f"Выберете фигуру для замены:\nR N B Q")
-        input_data = input(f'enter text: ').replace(' ', '').replace(' ', '').strip().lower()
+    def pawn_chenger(self, x: int, y: int) -> None:
+        """Функция замены пешки другую на фигуру"""
+
+        color = self.color
+        figures_to_chenge = Data.figures_to_chenge(color)
+        text = f"Выберите одну из фигур <{'/'.join(figures_to_chenge)}>: "
+        if color == 'white':
+            piece_symbol = input(text).strip().upper()
+        else:
+            piece_symbol = input(text).strip().lower()
+
+        # Замена пешки на фигуру
+        if piece_symbol in figures_to_chenge:
+            Board.set_piece(x, y, piece_symbol)
+        else:
+            print('-- Неверная фигура -- ')
 
 
 class Visual:
@@ -640,9 +681,8 @@ class Game:
             input_data = input('enter text: ').strip().lower()
             self.command_handler(input_data)
 
-            if self.is_checkmate(Data.cur_color) or self.is_stalemate(Data.cur_color):
+            if self.is_checkmate(self.cur_color) or self.is_stalemate(self.cur_color):
                 self.game_over()
-
 
 
     def stop(self) -> None:
@@ -657,6 +697,7 @@ class Game:
             print('-- Пат --')
 
         print('-- Игра окончена --')
+        print(text2art('GAME OVER'))
         self.stop()
 
 
@@ -717,6 +758,7 @@ class Game:
         else: 
             print("\n-- Nothing --\n")
     
+
     @staticmethod
     def is_check(color: str) -> bool:
         """Функция проверки на шах"""
@@ -731,6 +773,7 @@ class Game:
 
         return False
     
+
     @staticmethod
     def is_checkmate(color: str) -> bool:
         """Функция проверки на мат"""
@@ -782,6 +825,7 @@ class Game:
 
         return in_check
     
+
     @staticmethod
     def is_stalemate(color: str) -> bool:
         """Проверка на пат"""
@@ -799,9 +843,6 @@ class Game:
                             return False
 
         return True
-
-
-
 
         
         
