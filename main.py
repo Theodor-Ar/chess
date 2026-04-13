@@ -241,48 +241,37 @@ class Piece:
             Data.dead[fallen_piece] += 1
             Data.alive[fallen_piece] -= 1
             Board.set_piece(x, y, '.')
-
+    
 
     @staticmethod
-    def hint(x1: int, y1: int) -> list:
+    def hint(x: int, y: int) -> list:
         """Подсказка допустимых ходов для фигуры"""
-        if Piece.is_empty_cell(x1, y1):
-            raise TypeError('-- Empty cell --')
 
-        piece = Piece.piece(x1, y1)
-        start_pos = (x1, y1)
         lst = []
-
-        for x2 in range(8):
-            for y2 in range(8):
-                end_pos = (x2, y2)
-                can_move = piece.can_move(start_pos, end_pos)[0]
-
-                if can_move and not Game.move_causes_check(start_pos, end_pos):
-                    lst.append(end_pos)
+        color = Board.get_piece_color(x, y)
+        legal_moves = Data.legal_moves(color)
+        for start_pos, end_pos in legal_moves:
+            if start_pos == (x, y):
+                lst.append(end_pos)
 
         return lst
-
     
+
     @staticmethod
     def under_threat() -> list:
         """Функция подсказки позиций, которые находятся по угрозой, для текущего цвета"""
+        
         lst = []
 
-        white_positions = Data.pieces_positions('white')
-        black_positions = Data.pieces_positions('black')
-        cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
-                
-        enemy_positions = white_positions if cur_color == 'black' else black_positions
-        ally_positions = white_positions if cur_color == 'white' else black_positions
+        ally_color = Data.cur_color
+        enemy_color = 'white' if ally_color == 'black' else 'black'
 
-        for enemy_pos in enemy_positions:
-            for ally_pos in ally_positions:
-                piece = Piece.piece(*enemy_pos)
-                A = piece.can_move(enemy_pos, ally_pos)[0]
-                B = ally_pos not in lst
-                if A and B:
-                    lst.append(ally_pos)
+        ally_positions = Data.pieces_positions(ally_color)
+        enemy_moves = Data.legal_moves(enemy_color)
+
+        for _, end_pos in enemy_moves:
+            if end_pos in ally_positions:
+                lst.append(end_pos)
 
         return lst
 
@@ -326,7 +315,7 @@ class Piece:
                     print(desc)
                 return
 
-            if Game.move_causes_check(start_pos, end_pos):
+            if (start_pos, end_pos) not in Data.legal_moves(Data.cur_color):
                 print('Недопустимый ход: после него король останется под шахом')
                 return
 
@@ -640,7 +629,7 @@ class Visual:
     def status() -> None:
         enemy_color = Data.cur_color
         if Game.is_check(enemy_color):
-            print(f'-- Шах {'белым' if enemy_color == 'white' else 'чёрным'} --')
+            print(f"-- Шах {'белым' if enemy_color == 'white' else 'чёрным'} --")
 
 
     @staticmethod
@@ -806,40 +795,6 @@ class Game:
             under_threat()
         else: 
             print("\n-- Nothing --\n")
-
-
-    @staticmethod
-    def move_causes_check(start_pos: tuple, end_pos: tuple) -> bool:
-        """Проверяет, останется ли свой король под шахом после хода"""
-
-        mover_color = Board.get_piece_color(*start_pos)
-        moving_piece = Board.get_piece(*start_pos)
-        target_piece = Board.get_piece(*end_pos)
-
-        captured_en_passant_pos = None
-        captured_en_passant_piece = None
-
-        # en passant: пешка идёт по диагонали на пустую клетку
-        if moving_piece.lower() == 'p':
-            x1, y1 = start_pos
-            x2, y2 = end_pos
-            if x1 != x2 and target_piece == '.' and end_pos == Pawn.en_passant_pos:
-                captured_en_passant_pos = (x2, y2 - 1) if mover_color == 'white' else (x2, y2 + 1)
-                captured_en_passant_piece = Board.get_piece(*captured_en_passant_pos)
-                Board.set_piece(*captured_en_passant_pos, '.')
-
-        Board.set_piece(*end_pos, moving_piece)
-        Board.set_piece(*start_pos, '.')
-
-        in_check = Game.is_check(mover_color)
-
-        Board.set_piece(*start_pos, moving_piece)
-        Board.set_piece(*end_pos, target_piece)
-
-        if captured_en_passant_pos is not None:
-            Board.set_piece(*captured_en_passant_pos, captured_en_passant_piece)
-
-        return in_check
     
 
     @staticmethod
