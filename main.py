@@ -54,6 +54,7 @@ class Data:
     @classmethod
     def figures_to_chenge(cls, color: str) -> set:
         """Доступные фигуры для замены пешки в конце поля"""
+
         if color == 'white':
             return cls.white_pieces - {'K', 'P'}
         elif color == 'black':
@@ -99,8 +100,8 @@ class Data:
 
 
     
-    white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
-    black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
+    white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P', 'F', 'I', 'S'}
+    black_pieces = {'k', 'q', 'b', 'r', 'n', 'p', 'f', 'i', 's'}
 
     cnt_moves = 0
     cur_color = 'white'
@@ -111,7 +112,10 @@ class Data:
         'r': 5,
         'n': 3,
         'b': 3,
-        'p': 1
+        'p': 1,
+        'f': 1,
+        'i': 1,
+        's': 1
     }
 
     symbols = {
@@ -143,12 +147,18 @@ class Data:
         'B': 2,
         'Q': 1,
         'K': 1,
+        'F': 0,
+        'I': 0,
+        'S': 0,
         'p': 8,
         'r': 2,
         'n': 2,
         'b': 2,
         'q': 1,
-        'k': 1
+        'k': 1,
+        'f': 0,
+        'i': 0,
+        's': 0
     }
 
     dead = {
@@ -158,12 +168,18 @@ class Data:
         'B': 0,
         'Q': 0,
         'K': 0,
+        'F': 0,
+        'I': 0,
+        'S': 0,
         'p': 0,
         'r': 0,
         'n': 0,
         'b': 0,
         'q': 0,
-        'k': 0
+        'k': 0,
+        'f': 0,
+        'i': 0,
+        's': 0
     }
 
 
@@ -289,7 +305,10 @@ class Piece:
                 'r': Rook(color),
                 'n': Knight(color),
                 'b': Bishop(color),
-                'p': Pawn(color)
+                'p': Pawn(color),
+                'f': Frog(color),
+                'i': Infantry(color),
+                's': Star(color)
             }
             return pieces[symbol.lower()]
         else:
@@ -609,8 +628,82 @@ class Pawn(Piece):
         # Замена пешки на фигуру
         if piece_symbol in figures_to_chenge:
             Board.set_piece(x, y, piece_symbol)
+            Data.alive[piece_symbol] += 1
         else:
             print('-- Неверная фигура -- ')
+
+
+class Frog(Piece):
+    """Класс первой новой фигуры"""
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'F' if color == 'white' else 'f'
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+
+        # "прыгает" на 2 клетки в радиусе начальной позиции
+        A = dx == 2 and 0 <= dy <= 2
+        B = 0 <= dx <= 0 and dy == 2
+
+        can_move = A or B
+        desc = None
+        
+        return can_move, desc
+    
+
+class Infantry(Piece):
+    """Класс второй новой фигуры"""
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'I' if color == 'white' else 'i'
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+
+        # ходит в радиусе 1 клетки
+        A = 0 <= dx <= 1
+        B = 0 <= dy <= 1
+
+        can_move = A and B
+        desc = None
+        
+        return can_move, desc
+
+
+class Star(Piece):
+    """Класс второй новой фигуры"""
+    def __init__(self, color):
+        super().__init__(color)
+        if color in {'black', 'white'}: 
+            self.symbol = 'I' if color == 'white' else 'i'
+
+    @Piece.validate_move
+    def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+
+        # ходит в радиусе 1 клетки
+        A = dx == 2 and dy == 0
+        B = dx == 0 and dy == 2
+        C = dx == 2 and dy == 2
+
+        can_move = A or B or C
+        desc = None
+        
+        return can_move, desc
 
 
 class Visual:
@@ -834,6 +927,3 @@ class Game:
 if __name__ == '__main__':
     game = Game()
     game.start()
-
-
-
