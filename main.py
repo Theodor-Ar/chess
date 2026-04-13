@@ -60,6 +60,44 @@ class Data:
             return cls.black_pieces - {'k', 'p'}
         else:
             assert color not in {'white', 'black'}, f'{color=} not in {"white", "black"}'
+
+    @classmethod
+    def possible_moves(cls, color: str) -> list:
+        """Все возможные ходы для одной из сторон"""
+
+        lst = []
+        start_positions = cls.pieces_positions(color)
+        for start_pos in start_positions:
+            for x in range(8):
+                for y in range(8):
+                    end_pos = x, y
+                    piece = Piece.piece(*start_pos)
+                    if piece.can_move(start_pos, end_pos)[0] and end_pos not in lst:
+                        lst.append((start_pos, end_pos))
+                        
+        return lst
+    
+    @classmethod
+    def legal_moves(cls, color: str) -> list:
+        """Все возможные ходы одной из сторон, после которых не будет угроз королю"""
+
+        lst = []
+
+        for start_pos, end_pos in cls.possible_moves(color):
+            end_sym = Board.get_piece(*end_pos)
+            # Двигаем фигуру и проверяем, что потом не будет шаха
+            Board.move_piece(start_pos, end_pos)
+            if not Game.is_check(color):
+                lst.append((start_pos, end_pos))
+            # Возвращаем фигуру на место
+            Board.move_piece(end_pos, start_pos)
+            Board.set_piece(*end_pos, end_sym)
+        
+        return lst
+
+
+
+
     
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p'}
@@ -590,10 +628,20 @@ class Visual:
     """Класс для отображения визуальной части"""
 
     @staticmethod
+    def print_all_moves(color: str) -> None:
+        for i, (start_pos, end_pos) in enumerate(Data.legal_moves(color)):
+            sym = Board.get_piece(*start_pos)
+            sq1 = Data.crd_to_sq(*start_pos)
+            sq2 = Data.crd_to_sq(*end_pos)
+            print(f"{i + 1}. {sym} {sq1}-{sq2}")
+
+
+    @staticmethod
     def status() -> None:
         enemy_color = Data.cur_color
         if Game.is_check(enemy_color):
             print(f'-- Шах {'белым' if enemy_color == 'white' else 'чёрным'} --')
+
 
     @staticmethod
     def _line() -> None:
@@ -681,7 +729,7 @@ class Game:
             input_data = input('enter text: ').strip().lower()
             self.command_handler(input_data)
 
-            if self.is_checkmate(self.cur_color) or self.is_stalemate(self.cur_color):
+            if self.is_checkmate(Data.cur_color) or self.is_stalemate(Data.cur_color):
                 self.game_over()
 
 
@@ -703,6 +751,7 @@ class Game:
 
     def command_handler(self, command: str) -> None:
         """Функция-обработчик команд"""
+
         def chess_move():
             sq1, sq2 = command.split('-')
             start_pos, end_pos = Data.sq_to_crd(sq1), Data.sq_to_crd(sq2)
@@ -757,45 +806,12 @@ class Game:
             under_threat()
         else: 
             print("\n-- Nothing --\n")
-    
 
-    @staticmethod
-    def is_check(color: str) -> bool:
-        """Функция проверки на шах"""
-        king_pos = Data.king_pos(color)
-        enemy_color = 'black' if color == 'white' else 'white'
-        enemy_positions = Data.pieces_positions(enemy_color)
 
-        for pos in enemy_positions:
-            piece = Piece.piece(*pos)
-            if piece.can_move(pos, king_pos)[0]:
-                return True
-
-        return False
-    
-
-    @staticmethod
-    def is_checkmate(color: str) -> bool:
-        """Функция проверки на мат"""
-        if not Game.is_check(color):
-            return False
-
-        for start_pos in Data.pieces_positions(color):
-            piece = Piece.piece(*start_pos)
-
-            for x in range(8):
-                for y in range(8):
-                    end_pos = (x, y)
-                    if piece.can_move(start_pos, end_pos)[0]:
-                        if not Game.move_causes_check(start_pos, end_pos):
-                            return False
-
-        return True
-
-    
     @staticmethod
     def move_causes_check(start_pos: tuple, end_pos: tuple) -> bool:
         """Проверяет, останется ли свой король под шахом после хода"""
+
         mover_color = Board.get_piece_color(*start_pos)
         moving_piece = Board.get_piece(*start_pos)
         target_piece = Board.get_piece(*end_pos)
@@ -827,26 +843,39 @@ class Game:
     
 
     @staticmethod
+    def is_check(color: str) -> bool:
+        """Функция проверки на шах"""
+
+        king_pos = Data.king_pos(color)
+        enemy_color = 'black' if color == 'white' else 'white'
+        enemy_positions = Data.pieces_positions(enemy_color)
+
+        for pos in enemy_positions:
+            piece = Piece.piece(*pos)
+            if piece.can_move(pos, king_pos)[0]:
+                return True
+
+        return False
+    
+
+    @staticmethod
+    def is_checkmate(color: str) -> bool:
+        """Функция проверки на мат"""
+
+        if Game.is_check(color) and not Data.legal_moves(color):
+            return True
+        return False
+    
+
+    @staticmethod
     def is_stalemate(color: str) -> bool:
         """Проверка на пат"""
-        if Game.is_check(color):
-            return False
-
-        for start_pos in Data.pieces_positions(color):
-            piece = Piece.piece(*start_pos)
-
-            for x in range(8):
-                for y in range(8):
-                    end_pos = (x, y)
-                    if piece.can_move(start_pos, end_pos)[0]:
-                        if not Game.move_causes_check(start_pos, end_pos):
-                            return False
-
-        return True
-
         
-        
-        
+        if not Game.is_check(color) and not Data.legal_moves(color):
+            return True
+        return False
+
+    
 if __name__ == '__main__':
     game = Game()
     game.start()
