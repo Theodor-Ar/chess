@@ -7,50 +7,67 @@ start_time = time()
 
 
 class Data:
-    """Класс для хранения статистики и прочих данных"""
+    """Класс для подсчёта и хранения данных"""
     
     @classmethod
-    def sq_to_crd(cls, square: str) -> tuple:  # функция перевода шазматной позиции в координату
+    def sq_to_crd(cls, square: str) -> tuple:
+        """Функция перевода шазматной позиции в координату"""
+
         sym, num = tuple(square)
         return (
             cls.symbols[sym], cls.numbers[num]
         )
     
+    
     @classmethod
-    def crd_to_sq(cls, x: int, y: int) -> str:  # функция перевода координаты в шахматную позицию
+    def crd_to_sq(cls, x: int, y: int) -> str:
+        """Функция перевода координаты в шахматную позицию"""
+
         x_to_sym = {v: k for k, v in cls.symbols.items()}
         y_to_num = {v: k for k, v in cls.numbers.items()}
         return x_to_sym[x] + y_to_num[y]
     
+
     @classmethod
     def score(cls, color: str) -> int:
+        """Кол-во очков одной из сторон"""
+
         white_score = 0  # очки белых
         black_score = 0  # очки черных
+
         for sym, n in cls.dead.items():
             if sym in cls.black_pieces:
                 white_score += cls.pieces_value[sym.lower()] * n
             else:
                 black_score += cls.pieces_value[sym.lower()] * n
+
         return white_score if color == 'white' else black_score
     
+
     @classmethod
     def pieces_positions(cls, color: str) -> list:
-        """Позиции фигур по цвету"""
+        """Позиции всех фигур определённого цвета"""
+
         positions = []
+
         for x in range(8):
             for y in range(8):
                 symbol = Board.get_piece(x, y)
                 if symbol in (cls.white_pieces if color == 'white' else cls.black_pieces):
                     positions.append((x, y))
+
         return positions
     
+
     @classmethod
     def king_pos(cls, color: str) -> tuple:
-        """Позиция короля по цвету"""
+        """Позиция короля определённого цвета"""
+
         for pos in cls.pieces_positions(color):
             if Board.get_piece(*pos) == ('K' if color == 'white' else 'k'):
                 return pos
             
+
     @classmethod
     def figures_to_chenge(cls, color: str) -> set:
         """Доступные фигуры для замены пешки в конце поля"""
@@ -60,7 +77,8 @@ class Data:
         elif color == 'black':
             return cls.black_pieces - {'k', 'p'}
         else:
-            assert color not in {'white', 'black'}, f'{color=} not in {"white", "black"}'
+            assert False, f'{color=} not in ("white", "black")'
+
 
     @classmethod
     def possible_moves(cls, color: str) -> list:
@@ -68,6 +86,7 @@ class Data:
 
         lst = []
         start_positions = cls.pieces_positions(color)
+
         for start_pos in start_positions:
             for x in range(8):
                 for y in range(8):
@@ -78,6 +97,7 @@ class Data:
                         
         return lst
     
+
     @classmethod
     def legal_moves(cls, color: str) -> list:
         """Все возможные ходы одной из сторон, после которых не будет угроз королю"""
@@ -86,10 +106,13 @@ class Data:
 
         for start_pos, end_pos in cls.possible_moves(color):
             end_sym = Board.get_piece(*end_pos)
+
             # Двигаем фигуру и проверяем, что потом не будет шаха
             Board.move_piece(start_pos, end_pos)
+
             if not Game.is_check(color):
                 lst.append((start_pos, end_pos))
+
             # Возвращаем фигуру на место
             Board.move_piece(end_pos, start_pos)
             Board.set_piece(*end_pos, end_sym)
@@ -97,15 +120,14 @@ class Data:
         return lst
 
 
-
-
-    
+    # Множества классических и новых фигур 
     white_pieces = {'K', 'Q', 'B', 'R', 'N', 'P', 'F', 'I', 'S'}
     black_pieces = {'k', 'q', 'b', 'r', 'n', 'p', 'f', 'i', 's'}
 
-    cnt_moves = 0
-    cur_color = 'white'
+    cnt_moves = 0  # Кол-во сделанных ходов
+    cur_color = 'white'  # Цвет, ходящий сейчас
     
+    # Ценности фигур
     pieces_value = {
         'k': 0,
         'q': 9,
@@ -118,6 +140,7 @@ class Data:
         's': 1
     }
 
+    # Словари для перевода шахматных позиций в координаты и наоборот
     symbols = {
         'a': 0,
         'b': 1,
@@ -140,6 +163,7 @@ class Data:
         '8': 7
     }
 
+    # Кол-во живых фигур
     alive = {
         'P': 8,
         'R': 2,
@@ -161,6 +185,7 @@ class Data:
         's': 0
     }
 
+    # Кол-во убитых фигур
     dead = {
         'P': 0,
         'R': 0,
@@ -190,16 +215,21 @@ class Board(Data):
 
     @classmethod
     def backup(cls, n: int = 1) -> None:
+        """Функция отката ход(а/ов) на некоторое кол-во шагов назад"""
+
         if -len(cls.__saved_data) <= -n < 0:
             saved_data = cls.__saved_data
             cls.matrix, Data.cnt_moves, Data.alive, Data.dead, Pawn.en_passant_pos = saved_data[-n]
             cls.__saved_data = saved_data[:(-n) + 1]
             Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
         else:
-            print('No backup')
+            print('Невозможно сделать откат хода на данное кол-во шагов назад')
         
+
     @classmethod
     def set_backup(cls) -> None:
+        """Функция для создания резервной копии"""
+
         packet = (
             deepcopy(cls.matrix),
             deepcopy(Data.cnt_moves),
@@ -209,6 +239,8 @@ class Board(Data):
         )
         cls.__saved_data.append(packet)
 
+
+    # Матрица шахматной доски
     matrix = [  
         ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
         ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
@@ -222,21 +254,28 @@ class Board(Data):
 
     @classmethod
     def get_piece(cls, x: int, y:int) -> str:
+        """Функция для получения символа фигуры по координатам"""
         return cls.matrix[7-y][x]
     
 
     @classmethod
     def set_piece(cls, x: int, y: int, piece: str) -> None:
+        """Функция для присвоения координатам символа"""
         cls.matrix[7-y][x] = piece
 
 
     @classmethod
     def move_piece(cls, start_pos: tuple, end_pos: tuple):
+        """Функция для перемещения фигуры с начальной позиции на конечную по доске"""
+
         cls.set_piece(*end_pos, cls.get_piece(*start_pos))
         cls.set_piece(*start_pos, '.')
 
+
     @classmethod
     def get_piece_color(cls, x: int, y: int) -> str:
+        """Функция для получения цвета фигуры по координатам"""
+
         symbol = cls.get_piece(x, y)
         if symbol == '.': 
             return 'empty'
@@ -246,22 +285,23 @@ class Board(Data):
 class Piece:
     """Родительский класс для всех фигур"""
 
-
     def __init__(self, color):
         self.color = color
 
 
     @staticmethod
     def capture(x: int, y: int) -> None:
-            fallen_piece = Board.get_piece(x, y)
-            Data.dead[fallen_piece] += 1
-            Data.alive[fallen_piece] -= 1
-            Board.set_piece(x, y, '.')
+        """Функция захвата фигуры"""
+        
+        fallen_piece = Board.get_piece(x, y)
+        Data.dead[fallen_piece] += 1
+        Data.alive[fallen_piece] -= 1
+        Board.set_piece(x, y, '.')
     
 
     @staticmethod
     def hint(x: int, y: int) -> list:
-        """Подсказка допустимых ходов для фигуры"""
+        """Функция подсказки допустимых ходов для фигуры находящейся на определённой позиции"""
 
         lst = []
         color = Board.get_piece_color(x, y)
@@ -347,14 +387,17 @@ class Piece:
             Data.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
 
             
-    
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
+        """Функция для обработки хода"""
+
         if not Piece.is_empty_cell(*end_pos):
             Piece.capture(*end_pos)
         Pawn.en_passant_pos = None
 
     
     def is_valid_target_cell(self, x: int, y: int) -> bool:
+        """Проверяет доступная ли конечная точка для перемещения"""
+
         if self.color == 'white':
             piece = Board.get_piece(x, y)
             return piece not in Data.white_pieces
@@ -367,11 +410,14 @@ class Piece:
 
     @staticmethod
     def is_empty_cell(x: int, y: int) -> bool:
+        """Проверяет пустая ли клетка"""
         return Board.get_piece(x, y) == '.'
 
 
-    def is_empty_line(self, start_pos: tuple, end_pos: tuple) -> bool:
+    @classmethod
+    def is_empty_line(cls, start_pos: tuple, end_pos: tuple) -> bool:
         """Функция проверки, что между двумя позициями все клетки пустые"""
+
         x1, y1 = start_pos
         x2, y2 = end_pos
         lst = [] 
@@ -384,13 +430,15 @@ class Piece:
                         (y - y1) * (y - y2) <= 0,
                         start_pos != (x, y) != end_pos
                     ]
-                    if all(conditions):  # проверка на то, что точка P лежит между start_pos и end_pos
+                    if all(conditions):  # проверка на то, что точка (x, y) лежит между start_pos и end_pos
                         lst.append((x, y))
 
-        return all(self.is_empty_cell(*i) for i in lst)
+        return all(cls.is_empty_cell(*i) for i in lst)
 
 
     def validate_move(func):
+        """Декоратор, проверяющий общие для всех фигур правила ходьбы"""
+
         def wrapper(self, start_pos, end_pos):
 
             if not all(0 <= a <= 7 for a in (*start_pos, *end_pos)):  # координаты обеих клеток внутри доски
@@ -413,12 +461,13 @@ class Piece:
 class King(Piece):
     """Класс короля """
 
-    was_moved = False
+    was_moved = False  # Делал ли корол ход
 
     def __init__(self, color):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'K' if color == 'white' else 'k'
+
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -489,6 +538,7 @@ class Queen(Piece):
         if color in {'black', 'white'}: 
             self.symbol = 'Q' if color == 'white' else 'q'
 
+
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
@@ -519,6 +569,7 @@ class Rook(Piece):
         if color in {'black', 'white'}: 
             self.symbol = 'R' if color == 'white' else 'r'
 
+
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
@@ -536,6 +587,7 @@ class Rook(Piece):
         
         return can_move, desc
     
+
     def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
         """Функция-обработчик хода ладьи"""
 
@@ -556,6 +608,7 @@ class Knight(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'N' if color == 'white' else 'n'
+
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -581,6 +634,7 @@ class Bishop(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'B' if color == 'white' else 'b'
+
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -608,6 +662,7 @@ class Pawn(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'P' if color == 'white' else 'p'
+
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -681,6 +736,7 @@ class Pawn(Piece):
                 self.capture(*end_pos)
             Pawn.en_passant_pos = None
 
+
     def pawn_chenger(self, x: int, y: int) -> None:
         """Функция замены пешки другую на фигуру"""
 
@@ -707,6 +763,7 @@ class Frog(Piece):
         if color in {'black', 'white'}: 
             self.symbol = 'F' if color == 'white' else 'f'
 
+
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
@@ -730,6 +787,7 @@ class Infantry(Piece):
         super().__init__(color)
         if color in {'black', 'white'}: 
             self.symbol = 'I' if color == 'white' else 'i'
+
 
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
@@ -755,6 +813,7 @@ class Star(Piece):
         if color in {'black', 'white'}: 
             self.symbol = 'I' if color == 'white' else 'i'
 
+
     @Piece.validate_move
     def can_move(self, start_pos: tuple, end_pos: tuple) -> tuple:
         x1, y1 = start_pos
@@ -778,6 +837,8 @@ class Visual:
 
     @staticmethod
     def print_all_moves(color: str) -> None:
+        """Вывод всех доступных легальных ходов для определённого цвета"""
+
         for i, (start_pos, end_pos) in enumerate(Data.legal_moves(color)):
             sym = Board.get_piece(*start_pos)
             sq1 = Data.crd_to_sq(*start_pos)
@@ -787,6 +848,7 @@ class Visual:
 
     @staticmethod
     def status() -> None:
+        """Уведомляет о надичие шаха"""
         enemy_color = Data.cur_color
         if Game.is_check(enemy_color):
             print(f"-- Шах {'белым' if enemy_color == 'white' else 'чёрным'} --")
@@ -801,9 +863,14 @@ class Visual:
     @staticmethod
     def timer() -> None:
         """Вывод игрового таймера"""
-        c_time = time() - start_time  # текущее время игры с секундах
-        h, m, s = int(c_time // 3600), int(c_time // 60), c_time % 60  # часы - минуты - секунды игры
-        print(f"\tВремя игры: {h} ч. {m} мин. {s:.2f} сек.")
+
+        c_time = time() - start_time
+
+        h = int(c_time // 3600)  # Часы
+        m = int((c_time % 3600) // 60)  # Минуты
+        s = int(c_time % 60)  # Секунды
+
+        print(f"\tВремя игры: {h:02}:{m:02}:{s:02}")
 
 
     @staticmethod
@@ -815,6 +882,7 @@ class Visual:
     @staticmethod
     def game_score() -> None:
         """Вывод очков"""
+
         white_score = Data.score('white')
         black_score = Data.score('black')
         print(f"\tСчёт белых: {white_score}")
@@ -824,6 +892,7 @@ class Visual:
     @staticmethod
     def current_move() -> None:
         """Вывод текущего цвета"""
+
         color = 'белые' if Data.cur_color == 'white' else 'чёрные'
         print(f"\tСейчас ходят: {color}")
 
@@ -831,6 +900,7 @@ class Visual:
     @staticmethod
     def show_play_area() -> None:
         """Вывод игрового пространства"""
+
         s = ' ' * 5
         inf = [
             '<from> - <to> например a2-a3',
@@ -858,7 +928,9 @@ class Visual:
 
     @staticmethod
     def info() -> None:
-        print('')
+        """Подробная игровая информация"""
+
+        print()
         Visual.timer()
         Visual.move_counter()
         Visual.current_move()
@@ -866,12 +938,17 @@ class Visual:
 
 
 class Game:
+    """Класс игрового процесса"""
+
     def __init__(self):
         self.run = True
         self.cur_color = 'white' if Data.cnt_moves % 2 == 0 else 'black'
         self.cnt_moves = Data.cnt_moves
 
+
     def start(self) -> None:
+        """Функция запуска игры"""
+
         while self.run:
             Visual.show_play_area()
             Visual.status()
@@ -883,9 +960,13 @@ class Game:
 
 
     def stop(self) -> None:
+        """Функция остановки игры"""
         self.run = False
 
+
     def game_over(self) -> None:
+        """Функция обработки остановки игры"""
+
         if self.is_checkmate('white'):
             print('-- Белым поставлен мат --')
         elif self.is_checkmate('black'):
@@ -902,13 +983,18 @@ class Game:
         """Функция-обработчик команд"""
 
         def chess_move():
+            """Передвижение фигуры"""
+
             sq1, sq2 = command.split('-')
             start_pos, end_pos = Data.sq_to_crd(sq1), Data.sq_to_crd(sq2)
             color = Board.get_piece_color(*start_pos)
             piece = Piece(color)
             piece.move_piece(start_pos, end_pos)
 
+
         def hint():
+            """Подсказка хода"""
+
             _, square = command.split()
             x, y = Data.sq_to_crd(square)
             hint = Piece.hint(x, y)
@@ -919,8 +1005,12 @@ class Game:
             else:
                 print('\nДопустимых ходов нет')
 
+
         def undo():
+            """Отмена ходов"""
+
             _, num = command.split()
+
             if num:
                 try:
                     num = int(num)
@@ -930,8 +1020,12 @@ class Game:
             else:
                 Board.backup()
 
+
         def under_threat():
+            """Фигуры под угрозой"""
+
             threat_positions = Piece.under_threat()
+
             if threat_positions:
                 print('Фигуры, находящиеся под угрозой')
                 for i, pos in enumerate(threat_positions):
@@ -940,6 +1034,7 @@ class Game:
                     print(f"{i + 1}. {symbol} на {square}")
             else:
                 print('Фигур под угрозой нет')
+                
         
         if fnmatch(command, '[a-h][1-8]-[a-h][1-8]'): 
             chess_move()
