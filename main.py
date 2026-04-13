@@ -73,7 +73,7 @@ class Data:
                 for y in range(8):
                     end_pos = x, y
                     piece = Piece.piece(*start_pos)
-                    if piece.can_move(start_pos, end_pos)[0] and end_pos not in lst:
+                    if piece.can_move(start_pos, end_pos)[0]:
                         lst.append((start_pos, end_pos))
                         
         return lst
@@ -413,6 +413,8 @@ class Piece:
 class King(Piece):
     """Класс короля """
 
+    was_moved = False
+
     def __init__(self, color):
         super().__init__(color)
         if color in {'black', 'white'}: 
@@ -423,10 +425,60 @@ class King(Piece):
         x1, y1 = start_pos
         x2, y2 = end_pos
 
+        def castling() -> bool:
+            """Функция проверки рокировки"""
+
+            # Проверка, что выбрана корректная конечная точка для хода
+            A = x2 in {1, 6}
+            B = y2 == 0 if self.color == 'white' else 7
+            correct_end_pos = A and B
+            
+            # Проверка, что король на правильной позиции и не ходил
+            king_pos = Data.king_pos(self.color)
+            C = king_pos == ((4, 0) if self.color == 'white' else (4, 7))
+            D = king_pos == start_pos
+            E = self.was_moved == False
+            correct_king_pos = C and D and E
+
+            # Проверка, что между королём и ладьёй нет фигур
+            rook_pos = x2 + (1 if x2 > x1 else -1), y2
+            empty_line = self.is_empty_line(king_pos, rook_pos)
+
+            # Проверка, что ладья не ходила
+            rook_was_moved = Rook.was_moved_left if x2 < x1 else Rook.was_moved_right
+
+            return correct_end_pos and correct_king_pos and empty_line and not(rook_was_moved)
+        
+        if castling():
+            return True, 'King: castling'
+
         can_move = max(abs(x1 - x2), abs(y1 - y2)) == 1
         desc = None
         
         return can_move, desc
+    
+
+    def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
+        """Функция-обработчик хода короля"""
+
+        x1, _ = start_pos
+        x2, y2 = end_pos
+        desc = self.can_move(start_pos, end_pos)[1]
+
+        if desc == 'King: castling':
+            # Позиции для перемещения ладьи
+            rook_start_pos = x2 + (1 if x2 > x1 else -1), y2
+            rook_end_pos = x2 - (1 if x2 > x1 else -1), y2
+
+            # Рокировка
+            Board.move_piece(start_pos, end_pos)
+            Board.move_piece(rook_start_pos, rook_end_pos)
+
+        elif not Piece.is_empty_cell(*end_pos):
+            Piece.capture(*end_pos)
+
+        Pawn.en_passant_pos = None
+        King.was_moved = True
 
 
 class Queen(Piece):
@@ -459,6 +511,9 @@ class Queen(Piece):
 class Rook(Piece):
     """Класс ладьи """
 
+    was_moved_right = False
+    was_moved_left = False
+
     def __init__(self, color):
         super().__init__(color)
         if color in {'black', 'white'}: 
@@ -480,6 +535,18 @@ class Rook(Piece):
         desc = None
         
         return can_move, desc
+    
+    def move_handler(self, start_pos: tuple, end_pos: tuple) -> None:
+        """Функция-обработчик хода ладьи"""
+
+        if start_pos in {(0, 0), (0, 7)}:
+            self.was_moved_left = True
+        elif start_pos in {(7, 0), (7, 7)}:
+            self.was_moved_right = True
+
+        if not Piece.is_empty_cell(*end_pos):
+            Piece.capture(*end_pos)
+        Pawn.en_passant_pos = None
 
 
 class Knight(Piece):
